@@ -3,7 +3,7 @@ import { resolve } from "node:path";
 import { parse } from "yaml";
 import { z } from "zod";
 
-export const SETTINGS_FILE = "rockyctl.yaml";
+export const SETTINGS_FILE = ".rockyctl/config/rockyctl.yaml";
 
 const OllamaSchema = z.object({
   baseUrl: z.string().url().default("http://192.168.0.192:11434"),
@@ -18,7 +18,7 @@ const OllamaSchema = z.object({
 });
 
 const ModelsSchema = z.object({
-  generator: z.string().default("gemma4:26b-a4b-it-qat"),
+  generator: z.string().default("gemma4:26b-it-qat"),
   judge: z.string().default("gemma4:12b-it-qat"),
 });
 
@@ -44,9 +44,9 @@ const ShellSchema = z.object({
 
 const FilesSchema = z.object({
   // Project-level instructions handed to the generator on every iteration.
-  prompt: z.string().default("PROMPT.md"),
+  prompt: z.string().default(".rockyctl/config/PROMPT.md"),
   // The task list the loop works through. See tasks.yaml for the format.
-  tasks: z.string().default("tasks.yaml"),
+  tasks: z.string().default(".rockyctl/tasks.yaml"),
   // Where run logs land. Expected to grow into a full "storage" section later.
   logDir: z.string().default(".rockyctl/logs"),
   // The absolute directory path where files are modified.

@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { Command } from "commander";
-import { copyFileSync, existsSync, readFileSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { loadSettings, SETTINGS_FILE } from "./config.js";
@@ -20,18 +20,30 @@ const program = new Command()
 
 program
   .command("init")
-  .description(`Create ${SETTINGS_FILE}, PROMPT.md and tasks.yaml in the current directory`)
+  .description(`Create configuration files in .rockyctl/config/ and .rockyctl/`)
   .option("--force", "overwrite existing files")
   .action((opts: { force?: boolean }) => {
     const cwd = process.cwd();
-    for (const f of [SETTINGS_FILE, "PROMPT.md", "tasks.yaml"]) {
-      const dest = resolve(cwd, f);
+    const filesToCreate = [
+      { name: "rockyctl.yaml", subfolder: ".rockyctl/config" },
+      { name: "PROMPT.md", subfolder: ".rockyctl/config" },
+      { name: "tasks.yaml", subfolder: ".rockyctl" },
+    ];
+
+    for (const file of filesToCreate) {
+      const destDir = resolve(cwd, file.subfolder);
+      const dest = resolve(destDir, file.name);
+
       if (existsSync(dest) && !opts.force) {
-        ui.warn(`${f} exists, skipping (use --force to overwrite)`);
+        ui.warn(`${file.name} exists at ${file.subfolder}, skipping (use --force to overwrite)`);
         continue;
       }
-      copyFileSync(resolve(templatesDir, f), dest);
-      ui.ok(`created ${f}`);
+
+      // Ensure directory exists
+      mkdirSync(destDir, { recursive: true });
+
+      copyFileSync(resolve(templatesDir, file.name), dest);
+      ui.ok(`created ${file.name} in ${file.subfolder}`);
     }
     ui.info("\nNext: edit rockyctl.yaml and PROMPT.md, describe work in tasks.yaml, then run `rockyctl doctor`.");
   });
