@@ -1,0 +1,33 @@
+{
+  "name": "rockyctl",
+  "version": "0.1.0",
+  "description": "Ralph-loop agent harness for local LLMs via Ollama",
+  "type": "module",
+  "bin": {
+    "rockyctl": "./dist/index.js"
+  },
+  "files": [
+    "dist",
+    "templates"
+  ],
+  "engines": {
+    "node": ">=20.12"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "dev": "tsx src/index.ts",
+    "test": "node --import tsx --test \"tests/**/*.test.ts\"",
+    "prepare": "npm run build"
+  },
+  "dependencies": {
+    "commander": "^13.1.0",
+    "yaml": "^2.7.0",
+    "zod": "^3.24.2"
+  },
+  "devDependencies": {
+    "@types/node": "^22.13.0",
+    "tsx": "^4.19.3",
+    "typescript": "^5.8.2"
+  },
+  "license": "MIT"
+}

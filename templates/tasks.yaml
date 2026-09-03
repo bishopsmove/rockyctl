@@ -1,0 +1,21 @@
+# rockyctl task list
+#
+# The loop picks the first task whose status is `pending` or `in_progress`, hands it to the
+# generator, then asks the judge to grade the result against `criteria`. Write criteria the
+# judge can actually check by reading files or running an allowlisted command — vague criteria
+# ("code is clean") are the number one cause of loops that never finish.
+#
+# status: pending | in_progress | done | blocked   (managed by rockyctl; edit to re-queue)
+# attempts / lastCritique                          (managed by rockyctl)
+
+tasks:
+  - id: example-1
+    title: Add a hello endpoint
+    description: |
+      Add a GET /hello route to the HTTP server that returns the JSON body {"message":"hello"}.
+      Add a test that exercises it.
+    criteria:
+      - A GET /hello route exists and returns {"message":"hello"} with status 200.
+      - A test covers the new route and `npm test` passes.
+    status: pending
+    attempts: 0

@@ -1,0 +1,68 @@
+# rockyctl settings
+# All values shown are the defaults; delete any key to fall back to it.
+
+ollama:
+  baseUrl: http://127.0.0.1:11434
+  # Total budget (ms) for the readiness check: server reachable, both models present,
+  # and both models warmed into memory. Large models can take a while to load.
+  readyTimeoutMs: 120000
+  # Per-request timeout (ms) for a single generation call.
+  requestTimeoutMs: 600000
+  # Ask Ollama to keep models resident between iterations so we don't reload every loop.
+  keepAlive: 30m
+  # Context window requested for each call. The generator needs room for tool schemas
+  # plus whatever files it reads; raise this if you see truncation, lower it if VRAM is tight.
+  numCtx: 32768
+
+models:
+  # Writes the code. Must support tool calling in Ollama (`rockyctl doctor` verifies this).
+  generator: gemma4:26b-a4b-it-qat
+  # Grades each attempt against the task's criteria. Never the same context as the generator.
+  judge: gemma4:12b-it-qat
+
+loop:
+  # Failed judge verdicts per task before it is marked `blocked` instead of retried.
+  # 3 is deliberate: higher burns tokens on hopeless tasks, lower flags fixable work.
+  maxAttempts: 3
+  # Global safety stop on the number of generator/judge iterations in one `rockyctl run`.
+  maxIterations: 50
+  # Cap on tool calls the generator may make within one iteration before it is cut off.
+  maxToolCallsPerIteration: 40
+
+git:
+  # When true, each task that passes the judge is committed automatically
+  # (`git add -A && git commit`). When false, changes are left in the working tree.
+  autoCommit: true
+  # When true, `rockyctl run` refuses to start if the working tree has uncommitted changes,
+  # so the loop always begins from a known state and a bad iteration can be reverted cleanly.
+  checkDirtyTree: true
+  # Prefix for auto-commit messages: "<commitPrefix> <task id> - <task title>"
+  commitPrefix: "rockyctl:"
+
+shell:
+  # Allowlist for the `run_command` tool. Anything not matching is refused.
+  # Patterns are matched token by token: "*" matches any one token, a trailing "*" matches
+  # everything after it. Commands run WITHOUT a shell, so pipes, redirects, `&&`, and shell
+  # builtins are rejected outright — that is what keeps the allowlist meaningful.
+  #
+  # Keep this platform-neutral. Prefer cross-platform tools (git, npm, node, dotnet, python)
+  # over OS-specific ones (ls/cat/grep on Unix, dir/type/del on Windows). The model is given
+  # file tools (read_file, write_file, list_dir, search_files) so it never needs coreutils.
+  # `rockyctl doctor` warns about entries that will not work on the current OS.
+  allow:
+    - "git *"
+    - "npm *"
+    - "npx *"
+    - "node *"
+  # Kill a command that runs longer than this (ms).
+  timeoutMs: 300000
+  # Truncate captured stdout/stderr returned to the model beyond this many characters.
+  maxOutputChars: 20000
+
+files:
+  # Project-level instructions handed to the generator on every iteration.
+  prompt: PROMPT.md
+  # The task list the loop works through. See tasks.yaml for the format.
+  tasks: tasks.yaml
+  # Where per-iteration logs are written. Expected to grow into a `storage` section later.
+  logDir: .rockyctl/logs

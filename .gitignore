@@ -1,0 +1,10 @@
+node_modules/
+dist/
+
+/rockyctl.yaml
+/PROMPT.md
+/tasks.yaml
+
+.qodo
+.continue
+.claude
