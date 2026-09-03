@@ -43,10 +43,14 @@ const ShellSchema = z.object({
 });
 
 const FilesSchema = z.object({
+  // Project-level instructions handed to the generator on every iteration.
   prompt: z.string().default("PROMPT.md"),
+  // The task list the loop works through. See tasks.yaml for the format.
   tasks: z.string().default("tasks.yaml"),
   // Where run logs land. Expected to grow into a full "storage" section later.
   logDir: z.string().default(".rockyctl/logs"),
+  // The absolute directory path where files are modified.
+  workingFolder: z.string().default("/"),
 });
 
 export const SettingsSchema = z.object({
