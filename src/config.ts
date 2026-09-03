@@ -18,7 +18,7 @@ const OllamaSchema = z.object({
 });
 
 const ModelsSchema = z.object({
-  generator: z.string().default("gemma4:26b-it-qat"),
+  generator: z.string().default("gemma4:26b-a4b-it-qat"),
   judge: z.string().default("gemma4:12b-it-qat"),
 });
 
