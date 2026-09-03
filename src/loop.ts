@@ -38,6 +38,31 @@ export async function runLoop(settings: Settings, cwd: string, opts: RunOptions 
   await client.waitUntilReady([settings.models.generator, settings.models.judge], ui.step);
   log.event("ready", { models: settings.models });
 
+  try {
+    await runIterations(client, settings, cwd, store, projectPrompt, log, opts);
+  } catch (err) {
+    log.event("error", {
+      message: err instanceof Error ? err.message : String(err),
+      stack: err instanceof Error ? err.stack : undefined,
+    });
+    ui.dim(`Log: ${log.path}`);
+    throw err;
+  }
+
+  ui.dim(`Log: ${log.path}`);
+  const s = store.summary();
+  ui.info(`Tasks — done: ${s.done}, pending: ${s.pending}, blocked: ${s.blocked}`);
+}
+
+async function runIterations(
+  client: OllamaClient,
+  settings: Settings,
+  cwd: string,
+  store: TaskStore,
+  projectPrompt: string,
+  log: RunLog,
+  opts: RunOptions,
+): Promise<void> {
   for (let iteration = 1; iteration <= settings.loop.maxIterations; iteration++) {
     const task = opts.taskId ? store.get(opts.taskId) : store.next();
     if (!task) {
@@ -92,10 +117,6 @@ export async function runLoop(settings: Settings, cwd: string, opts: RunOptions 
 
     if (opts.once) break;
   }
-
-  ui.dim(`Log: ${log.path}`);
-  const s = store.summary();
-  ui.info(`Tasks — done: ${s.done}, pending: ${s.pending}, blocked: ${s.blocked}`);
 }
 
 async function runGenerator(

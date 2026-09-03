@@ -65,7 +65,12 @@ export class OllamaClient {
       "/api/chat",
       {
         method: "POST",
-        body: JSON.stringify({ model, messages: [], keep_alive: this.settings.keepAlive }),
+        body: JSON.stringify({
+          model,
+          messages: [],
+          keep_alive: this.settings.keepAlive,
+          options: { num_ctx: this.settings.numCtx },
+        }),
       },
       timeoutMs,
     );
@@ -217,7 +222,11 @@ export class OllamaClient {
       if ((err as Error).name === "AbortError") {
         throw new OllamaError(`${init.method} ${path} timed out after ${timeoutMs}ms`);
       }
-      throw new OllamaError(`${init.method} ${path} failed: ${(err as Error).message}`);
+      const cause = (err as Error & { cause?: unknown }).cause;
+      const causeMsg = cause instanceof Error ? cause.message : cause ? String(cause) : undefined;
+      throw new OllamaError(
+        `${init.method} ${path} failed: ${(err as Error).message}${causeMsg ? ` (${causeMsg})` : ""}`,
+      );
     } finally {
       clearTimeout(timer);
     }
