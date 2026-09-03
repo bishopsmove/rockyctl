@@ -1,6 +1,7 @@
 node_modules/
 dist/
 backup/
+.rockyctl/
 
 /rockyctl.yaml
 /PROMPT.md
