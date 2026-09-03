@@ -133,10 +133,23 @@ async function runGenerator(
   ];
   let toolCalls = 0;
   for (;;) {
-    const res = await client.chat(settings.models.generator, messages, { tools: GENERATOR_TOOLS });
+    const progress = ui.progress(`generator ${settings.models.generator}`);
+    let res;
+    try {
+      res = await client.chat(settings.models.generator, messages, { tools: GENERATOR_TOOLS, onToken: progress });
+    } finally {
+      progress.done();
+    }
     const msg = res.message;
     messages.push(msg);
-    log.event("generator.turn", { task: task.id, content: msg.content, tool_calls: msg.tool_calls, eval_count: res.eval_count });
+    log.event("generator.turn", {
+      task: task.id,
+      content: msg.content,
+      tool_calls: msg.tool_calls,
+      prompt_eval_count: res.prompt_eval_count,
+      eval_count: res.eval_count,
+      total_duration_ms: res.total_duration ? Math.round(res.total_duration / 1e6) : undefined,
+    });
 
     if (!msg.tool_calls?.length) return msg.content ?? "";
 
@@ -177,7 +190,13 @@ async function runJudge(
   ];
   let toolCalls = 0;
   for (;;) {
-    const res = await client.chat(settings.models.judge, messages, { tools: JUDGE_TOOLS, temperature: 0 });
+    const progress = ui.progress(`judge ${settings.models.judge}`);
+    let res;
+    try {
+      res = await client.chat(settings.models.judge, messages, { tools: JUDGE_TOOLS, temperature: 0, onToken: progress });
+    } finally {
+      progress.done();
+    }
     const msg = res.message;
     messages.push(msg);
     log.event("judge.turn", { task: task.id, content: msg.content, tool_calls: msg.tool_calls });

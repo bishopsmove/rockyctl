@@ -41,6 +41,29 @@ export async function doctor(settings: Settings, cwd: string): Promise<boolean> 
     return false;
   }
 
+  // Where did the models actually land? A model that only partially fits in VRAM runs on
+  // CPU for the rest and can be 10x slower — the usual reason a first iteration "hangs".
+  try {
+    const loaded = await client.loadedModels();
+    const gb = (n: number) => (n / 1024 ** 3).toFixed(1) + " GB";
+    for (const model of new Set(Object.values(settings.models))) {
+      const m = loaded.find((l) => l.name === model || l.name === `${model}:latest`);
+      if (!m) {
+        ui.warn(`${model} is not resident after warm-up (evicted already? check keepAlive / other clients).`);
+        continue;
+      }
+      const pct = m.size ? Math.round((m.size_vram / m.size) * 100) : 0;
+      const ctx = m.context_length ? `, ctx ${m.context_length}` : "";
+      if (pct >= 100) ui.ok(`${model}: ${gb(m.size)} fully in GPU memory${ctx}`);
+      else if (pct === 0) ui.warn(`${model}: ${gb(m.size)} loaded entirely on CPU${ctx} — expect very slow generation.`);
+      else ui.warn(`${model}: ${gb(m.size)} loaded, only ${pct}% in GPU memory${ctx} — partial CPU offload, expect slow generation.`);
+    }
+    const total = loaded.reduce((a, m) => a + m.size, 0);
+    if (loaded.length > 1) ui.info(`  ${loaded.length} models resident, ${gb(total)} total. If they don't both fit, Ollama will swap them every iteration.`);
+  } catch (err) {
+    ui.warn(`Could not query /api/ps: ${err instanceof Error ? err.message : String(err)}`);
+  }
+
   for (const [role, model] of Object.entries(settings.models)) {
     try {
       const ok = await client.supportsTools(model, settings.ollama.requestTimeoutMs);

@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { Command } from "commander";
-import { copyFileSync, existsSync, mkdirSync, readFileSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, readFileSync, appendFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { loadSettings, SETTINGS_FILE } from "./config.js";
@@ -22,7 +22,8 @@ program
   .command("init")
   .description(`Create configuration files in .rockyctl/config/ and .rockyctl/`)
   .option("--force", "overwrite existing files")
-  .action((opts: { force?: boolean }) => {
+  .option("--updateGitIgnore", "add .rockyctl/ to .gitignore")
+  .action((opts: { force?: boolean; updateGitIgnore?: boolean }) => {
     const cwd = process.cwd();
     const filesToCreate = [
       { name: "rockyctl.yaml", subfolder: ".rockyctl/config" },
@@ -45,7 +46,26 @@ program
       copyFileSync(resolve(templatesDir, file.name), dest);
       ui.ok(`created ${file.name} in ${file.subfolder}`);
     }
-    ui.info("\nNext: edit rockyctl.yaml and PROMPT.md in .rockctl/config, describe work in .rockyctl/tasks.yaml, then run `rockyctl doctor`.");
+
+    if (opts.updateGitIgnore) {
+      const gitignorePath = resolve(cwd, ".gitignore");
+      const gitignoreExists = existsSync(gitignorePath);
+      let gitignoreContent = "";
+      if (gitignoreExists) {
+        gitignoreContent = readFileSync(gitignorePath, "utf8");
+      }
+
+      const lineToSearch = ".rockyctl/";
+      if (!gitignoreContent.includes(lineToSearch)) {
+        const contentToAdd = gitignoreExists && gitignoreContent.length > 0 && !gitignoreContent.endsWith('\n') ? "\n" : "";
+        appendFileSync(gitignorePath, `${contentToAdd}${lineToSearch}\n`);
+        ui.ok(`added ${lineToSearch} to .gitignore`);
+      } else {
+        ui.info(`.gitignore already contains ${lineToSearch}`);
+      }
+    }
+
+    ui.info("\nNext: edit rockyctl.yaml and PROMPT.md in .rockyctl/config, describe work in .rockyctl/tasks.yaml, then run `rockyctl doctor`.");
   });
 
 program

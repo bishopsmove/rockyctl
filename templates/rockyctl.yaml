@@ -60,9 +60,11 @@ shell:
   maxOutputChars: 20000
 
 files:
+  # Everything rockyctl owns lives under .rockyctl/ (created by `rockyctl init`).
+  # Paths are relative to the project root.
   # Project-level instructions handed to the generator on every iteration.
-  prompt: PROMPT.md
+  prompt: .rockyctl/config/PROMPT.md
   # The task list the loop works through. See tasks.yaml for the format.
-  tasks: tasks.yaml
+  tasks: .rockyctl/tasks.yaml
   # Where per-iteration logs are written. Expected to grow into a `storage` section later.
   logDir: .rockyctl/logs

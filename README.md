@@ -27,7 +27,8 @@ Requires Node 20.12+ and an Ollama server with the generator and judge models pu
 In the repository you want the agent to work on:
 
 ```sh
-rockyctl init      # writes rockyctl.yaml, PROMPT.md, tasks.yaml
+rockyctl init      # writes .rockyctl/config/{rockyctl.yaml,PROMPT.md} and .rockyctl/tasks.yaml
+                   # add --updateGitIgnore to add .rockyctl/ to the repo's .gitignore
 rockyctl doctor    # checks Ollama, models, tool support, git, settings
 rockyctl run       # loops until no pending tasks, a task is blocked, or maxIterations
 rockyctl status
@@ -40,16 +41,29 @@ that would be sent.
 
 | File | Purpose |
 | --- | --- |
-| `rockyctl.yaml` | Settings. Every key is commented in the generated file. |
-| `PROMPT.md` | Project-level instructions given to the generator on every iteration. |
-| `tasks.yaml` | Work items: `id`, `title`, `description`, `criteria[]`, plus `status`/`attempts`/`lastCritique` managed by rockyctl. Comments are preserved. |
+| `.rockyctl/config/rockyctl.yaml` | Settings. Every key is commented in the generated file. |
+| `.rockyctl/config/PROMPT.md` | Project-level instructions given to the generator on every iteration. |
+| `.rockyctl/tasks.yaml` | Work items: `id`, `title`, `description`, `criteria[]`, plus `status`/`attempts`/`lastCritique` managed by rockyctl. Comments are preserved. |
 | `.rockyctl/logs/` | One JSONL log per run: every model turn, tool call, verdict, and commit. |
 
 ## Readiness
 
 `doctor` and `run` both wait for Ollama under a single `ollama.readyTimeoutMs` budget: poll `/api/tags`
 until the server answers, confirm both models are installed, then load each model into memory with an
-empty chat request. Real requests pass `keep_alive` so models stay resident between iterations.
+empty chat request (with the configured `numCtx`, so the first real request doesn't trigger a reload).
+Real requests pass `keep_alive` so models stay resident between iterations. `doctor` also reports how much
+of each model landed in GPU memory (`/api/ps`): partial CPU offload is the usual reason a first iteration
+takes ten minutes.
+
+## Timeouts and streaming
+
+Generation requests are streamed (`stream: true`). Ollama then sends response headers immediately and
+tokens as they are produced, which gives a live progress line and, more importantly, avoids Node's
+undici default of a 300 s headers timeout — with a non-streamed request a single slow generation on a
+large model surfaces as a bare `fetch failed (Headers Timeout Error)`. rockyctl uses its own undici
+`Agent` with those timeouts disabled; the only generation deadline is `ollama.requestTimeoutMs`.
+Errors from the network layer are unwrapped so the real cause (`ECONNRESET`, `ECONNREFUSED`, …) is shown
+and written to the run log.
 
 ## Shell allowlist
 
