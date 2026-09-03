@@ -45,7 +45,7 @@ program
       copyFileSync(resolve(templatesDir, file.name), dest);
       ui.ok(`created ${file.name} in ${file.subfolder}`);
     }
-    ui.info("\nNext: edit rockyctl.yaml and PROMPT.md, describe work in tasks.yaml, then run `rockyctl doctor`.");
+    ui.info("\nNext: edit rockyctl.yaml and PROMPT.md in .rockctl/config, describe work in .rockyctl/tasks.yaml, then run `rockyctl doctor`.");
   });
 
 program
