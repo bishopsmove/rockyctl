@@ -36,7 +36,7 @@ export async function workingDiff(cwd: string, maxChars = 40_000): Promise<strin
 export async function commitAll(cwd: string, message: string): Promise<string> {
   const add = await git(["add", "-A"], cwd);
   if (add.code !== 0) throw new Error(`git add failed: ${add.err.trim()}`);
-  const commit = await git(["commit", "-m", message], cwd);
+  const commit = await git(["commit", "-m", message]);
   if (commit.code !== 0) {
     if (/nothing to commit/i.test(commit.out + commit.err)) return "(nothing to commit)";
     throw new Error(`git commit failed: ${commit.err.trim() || commit.out.trim()}`);
@@ -53,5 +53,17 @@ export function cleanupGitLock(cwd: string) {
     } catch (e) {
       console.error(`Failed to remove stale git lock file: ${lockFile} - ${e}`);
     }
+  }
+}
+
+export async function hasUntrackedFiles(cwd: string): Promise<boolean> {
+  const r = await git(["clean", "-nd"], cwd);
+  return r.code === 0 && r.out.trim().length > 0;
+}
+
+export async function cleanUntracked(cwd: string): Promise<void> {
+  const r = await git(["clean", "-fd"], cwd);
+  if (r.code !== 0) {
+    console.error(`git clean failed: ${r.err}`);
   }
 }

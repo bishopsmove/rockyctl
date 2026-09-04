@@ -4,7 +4,7 @@ import type { Settings } from "./config.js";
 import { OllamaClient, type ChatMessage } from "./ollama.js";
 import { TaskStore, type Task } from "./tasks.js";
 import { GENERATOR_TOOLS, JUDGE_TOOLS, executeTool } from "./tools/index.js";
-import { commitAll, isDirty, isGitRepo, workingDiff, cleanupGitLock } from "./tools/git.js";
+import { commitAll, isDirty, isGitRepo, workingDiff, cleanupGitLock, hasUntrackedFiles, cleanUntracked } from "./tools/git.js";
 import { generatorSystemPrompt, generatorUserPrompt, judgeSystemPrompt, judgeUserPrompt } from "./prompts.js";
 import { RunLog, ui } from "./log.js";
 
@@ -122,6 +122,13 @@ async function runIterations(
           break;
         }
       }
+    }
+
+    // Cleanup test-created assets at the end of an iteration.
+    const hasUntracked = await hasUntrackedFiles(cwd);
+    if (hasUntracked) {
+      ui.dim("Cleaning up untracked assets...");
+      await cleanUntracked(cwd);
     }
 
     if (opts.once) break;
