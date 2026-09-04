@@ -70,7 +70,7 @@ files:
   logDir: ".rockyctl/logs"
 `;
     writeFileSync(resolve(configDir, "rockyctl.yaml"), yamlContent);
-    writeFileSync(resolve(tasksDir, "tasks.yaml"), "[]");
+    writeFileSync(resolve(tasksDir, "tasks.yaml"), "tasks: []");
     writeFileSync(resolve(configDir, "PROMPT.md"), "prompt");
 
     // 4. Run the loop. We expect it to fail eventually.

@@ -21,24 +21,26 @@ interface Verdict {
 }
 
 export async function runLoop(settings: Settings, cwd: string, opts: RunOptions = {}): Promise<void> {
-  const client = new OllamaClient(settings.ollama);
-  const store = new TaskStore(resolve(cwd, settings.files.tasks));
-  const promptPath = resolve(cwd, settings.files.prompt);
-  const projectPrompt = existsSync(promptPath) ? readFileSync(promptPath, "utf8") : "";
   const log = new RunLog(settings.files.logDir, cwd);
-
-  const inRepo = await isGitRepo(cwd);
-  if (!inRepo && (settings.git.autoCommit || settings.git.checkDirtyTree)) {
-    throw new Error(`${cwd} is not a git repository. Run \`git init\` or disable git.autoCommit and git.checkDirtyTree.`);
-  }
-  if (settings.git.checkDirtyTree && (await isDirty(cwd))) {
-    throw new Error("Working tree has uncommitted changes. Commit or stash them first, or set git.checkDirtyTree: false.");
-  }
-
-  await client.waitUntilReady([settings.models.generator, settings.models.judge], ui.step);
-  log.event("ready", { models: settings.models });
+  let store: TaskStore;
 
   try {
+    const client = new OllamaClient(settings.ollama);
+    store = new TaskStore(resolve(cwd, settings.files.tasks));
+    const promptPath = resolve(cwd, settings.files.prompt);
+    const projectPrompt = existsSync(promptPath) ? readFileSync(promptPath, "utf8") : "";
+
+    const inRepo = await isGitRepo(cwd);
+    if (!inRepo && (settings.git.autoCommit || settings.git.checkDirtyTree)) {
+      throw new Error(`${cwd} is not a git repository. Run \`git init\` or disable git.autoCommit and git.checkDirtyTree.`);
+    }
+    if (settings.git.checkDirtyTree && (await isDirty(cwd))) {
+      throw new Error("Working tree has uncommitted changes. Commit or stash them first, or set git.checkDirtyTree: false.");
+    }
+
+    await client.waitUntilReady([settings.models.generator, settings.models.judge], ui.step);
+    log.event("ready", { models: settings.models });
+
     await runIterations(client, settings, cwd, store, projectPrompt, log, opts);
   } catch (err) {
     log.event("error", {
