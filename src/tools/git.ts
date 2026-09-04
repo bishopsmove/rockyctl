@@ -1,4 +1,6 @@
 import { spawn } from "node:child_process";
+import { unlinkSync, existsSync } from "node:fs";
+import { join } from "node:path";
 
 function git(args: string[], cwd: string): Promise<{ code: number | null; out: string; err: string }> {
   return new Promise((res) => {
@@ -41,4 +43,15 @@ export async function commitAll(cwd: string, message: string): Promise<string> {
   }
   const sha = await git(["rev-parse", "--short", "HEAD"], cwd);
   return sha.out.trim();
+}
+
+export function cleanupGitLock(cwd: string) {
+  const lockFile = join(cwd, ".git", "index.lock");
+  if (existsSync(lockFile)) {
+    try {
+      unlinkSync(lockFile);
+    } catch (e) {
+      console.error(`Failed to remove stale git lock file: ${lockFile} - ${e}`);
+    }
+  }
 }

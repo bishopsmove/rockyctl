@@ -4,7 +4,7 @@ import type { Settings } from "./config.js";
 import { OllamaClient, type ChatMessage } from "./ollama.js";
 import { TaskStore, type Task } from "./tasks.js";
 import { GENERATOR_TOOLS, JUDGE_TOOLS, executeTool } from "./tools/index.js";
-import { commitAll, isDirty, isGitRepo, workingDiff } from "./tools/git.js";
+import { commitAll, isDirty, isGitRepo, workingDiff, cleanupGitLock } from "./tools/git.js";
 import { generatorSystemPrompt, generatorUserPrompt, judgeSystemPrompt, judgeUserPrompt } from "./prompts.js";
 import { RunLog, ui } from "./log.js";
 
@@ -45,6 +45,7 @@ export async function runLoop(settings: Settings, cwd: string, opts: RunOptions 
       message: err instanceof Error ? err.message : String(err),
       stack: err instanceof Error ? err.stack : undefined,
     });
+    cleanupGitLock(cwd);
     ui.dim(`Log: ${log.path}`);
     throw err;
   }
@@ -75,7 +76,7 @@ async function runIterations(
     }
 
     ui.info("");
-    ui.step(`Iteration ${iteration}/${settings.loop.maxIterations} — task ${task.id}: ${task.title} (attempt ${task.attempts + 1}/${settings.loop.maxAttempts})`);
+    ui.step(`Iteration ${iteration}/${settings.loop.maxIterations} — task ${task.id}: ${task.title} (attempt ${task.attempts + 1}/${task.attempts + 1})`);
     log.event("iteration.start", { iteration, task: task.id, attempt: task.attempts + 1 });
     store.update(task.id, { status: "in_progress" });
 
@@ -90,7 +91,13 @@ async function runIterations(
 
     // --- Judge: separate model, separate context, sees diff + summary, verifies itself. ---
     const diff = await workingDiff(cwd);
-    const verdict = await runJudge(client, settings, cwd, task, summary, diff, log);
+    let verdict: Verdict;
+    try {
+      verdict = await runJudge(client, settings, cwd, task, summary, diff, log);
+    } catch (err) {
+      cleanupGitLock(cwd);
+      throw err;
+    }
 
     if (verdict.pass) {
       store.update(task.id, { status: "done", attempts: task.attempts + 1, lastCritique: undefined });

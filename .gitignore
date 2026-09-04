@@ -3,8 +3,6 @@ dist/
 backup/
 .rockyctl/
 
-temp_test*
-
 .qodo
 .continue
 .claude
