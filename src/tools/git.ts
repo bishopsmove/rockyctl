@@ -36,7 +36,7 @@ export async function workingDiff(cwd: string, maxChars = 40_000): Promise<strin
 export async function commitAll(cwd: string, message: string): Promise<string> {
   const add = await git(["add", "-A"], cwd);
   if (add.code !== 0) throw new Error(`git add failed: ${add.err.trim()}`);
-  const commit = await git(["commit", "-m", message]);
+  const commit = await git(["commit", "-m", message], cwd);
   if (commit.code !== 0) {
     if (/nothing to commit/i.test(commit.out + commit.err)) return "(nothing to commit)";
     throw new Error(`git commit failed: ${commit.err.trim() || commit.out.trim()}`);
