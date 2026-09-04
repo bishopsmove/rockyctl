@@ -3,9 +3,7 @@ dist/
 backup/
 .rockyctl/
 
-/rockyctl.yaml
-/PROMPT.md
-/tasks.yaml
+temp_test*
 
 .qodo
 .continue
