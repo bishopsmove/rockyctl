@@ -123,7 +123,7 @@ program
       if (trimmed === "true") newValue = true;
       else if (trimmed === "false") newValue = false;
       else if (trimmed === "null") newValue = null;
-      else if (!isNaN(trimmed) && !isNaN(parseFloat(trimmed))) newValue = Number(trimmed);
+      else if (!isNaN(Number(trimmed)) && !isNaN(parseFloat(trimmed))) newValue = Number(trimmed);
 
       setNestedValue(settings, opts.field, newValue);
       
