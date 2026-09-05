@@ -1,5 +1,6 @@
 import { readFileSync, existsSync } from "node:fs";
 import { resolve } from "node:path";
+import { execSync } from "node:child_process";
 import type { Settings } from "./config.js";
 import { OllamaClient, type ChatMessage } from "./ollama.js";
 import { TaskStore, type Task } from "./tasks.js";
@@ -55,6 +56,17 @@ export async function runLoop(settings: Settings, cwd: string, opts: RunOptions 
   ui.dim(`Log: ${log.path}`);
   const s = store.summary();
   ui.info(`Tasks — done: ${s.done}, pending: ${s.pending}, blocked: ${s.blocked}`);
+
+  if (!opts.dryRun) {
+    ui.step("Running tsc check...");
+    try {
+      execSync("npm run tsc", { stdio: "inherit", cwd });
+      ui.ok("TSC check passed!");
+    } catch (e) {
+      ui.fail("TSC check failed!");
+      process.exitCode = 1;
+    }
+  }
 }
 
 async function runIterations(

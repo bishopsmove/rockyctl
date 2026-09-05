@@ -17,7 +17,8 @@
     "build": "tsc -p tsconfig.json",
     "dev": "tsx src/index.ts",
     "test": "node --import tsx --test \"tests/**/*.test.ts\"",
-    "prepare": "npm run build"
+    "prepare": "npm run build",
+    "tsc": "tsc --noEmit"
   },
   "dependencies": {
     "commander": "^13.1.0",
