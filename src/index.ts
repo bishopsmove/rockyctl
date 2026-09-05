@@ -8,6 +8,7 @@ import { doctor } from "./doctor.js";
 import { runLoop } from "./loop.js";
 import { TaskStore } from "./tasks.js";
 import { ui } from "./log.js";
+import { runUi } from "./ui_cli.js";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const pkg = JSON.parse(readFileSync(resolve(here, "..", "package.json"), "utf8")) as { version: string };
@@ -66,6 +67,13 @@ program
     }
 
     ui.info("\nNext: edit rockyctl.yaml and PROMPT.md in .rockyctl/config, describe work in .rockyctl/tasks.yaml, then run `rockyctl doctor`.");
+  });
+
+program
+  .command("ui")
+  .description("Enter interactive UI mode")
+  .action(async () => {
+    await runUi(program);
   });
 
 program
