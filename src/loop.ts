@@ -69,7 +69,7 @@ async function runIterations(
   for (let iteration = 1; iteration <= settings.loop.maxIterations; iteration++) {
     const task = opts.taskId ? store.get(opts.taskId) : store.next();
     if (!task) {
-      ui.ok(opts.taskId ? `Task ${opts.taskId} not found.` : "No pending tasks. Done.");
+      ui.ok(opts.taskId ? `Task ${task.id} not found.` : "No pending tasks. Done.");
       break;
     }
     if (opts.taskId && (task.status === "done" || task.status === "blocked")) {
@@ -77,10 +77,12 @@ async function runIterations(
       break;
     }
 
+    const attempts = task.attempts + 1;
+    store.update(task.id, { attempts, status: "in_progress" });
+
     ui.info("");
-    ui.step(`Iteration ${iteration}/${settings.loop.maxIterations} — task ${task.id}: ${task.title} (attempt ${task.attempts + 1}/${task.attempts + 1})`);
-    log.event("iteration.start", { iteration, task: task.id, attempt: task.attempts + 1 });
-    store.update(task.id, { status: "in_progress" });
+    ui.step(`Iteration ${iteration}/${settings.loop.maxIterations} — task ${task.id}: ${task.title} (attempt ${attempts}/${settings.loop.maxAttempts})`);
+    log.event("iteration.start", { iteration, task: task.id, attempt: attempts });
 
     if (opts.dryRun) {
       ui.dim(generatorUserPrompt(task, settings));
@@ -102,7 +104,7 @@ async function runIterations(
     }
 
     if (verdict.pass) {
-      store.update(task.id, { status: "done", attempts: task.attempts + 1, lastCritique: undefined });
+      store.update(task.id, { status: "done", lastCritique: undefined });
       ui.ok(`Task ${task.id} passed: ${verdict.critique}`);
       if (settings.git.autoCommit) {
         const sha = await commitAll(cwd, `${settings.git.commitPrefix} ${task.id} - ${task.title}`);
@@ -110,9 +112,8 @@ async function runIterations(
         log.event("commit", { task: task.id, sha });
       }
     } else {
-      const attempts = task.attempts + 1;
       const blocked = attempts >= settings.loop.maxAttempts;
-      store.update(task.id, { status: blocked ? "blocked" : "pending", attempts, lastCritique: verdict.critique });
+      store.update(task.id, { status: blocked ? "blocked" : "pending", lastCritique: verdict.critique });
       ui.warn(`Task ${task.id} rejected (${attempts}/${settings.loop.maxAttempts}): ${verdict.critique.slice(0, 300)}`);
       if (blocked) {
         ui.fail(`Task ${task.id} marked blocked after ${attempts} attempts. Uncommitted changes left in the working tree for inspection.`);
