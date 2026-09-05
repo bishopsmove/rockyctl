@@ -56,17 +56,6 @@ export async function runLoop(settings: Settings, cwd: string, opts: RunOptions 
   ui.dim(`Log: ${log.path}`);
   const s = store.summary();
   ui.info(`Tasks — done: ${s.done}, pending: ${s.pending}, blocked: ${s.blocked}`);
-
-  if (!opts.dryRun) {
-    ui.step("Running tsc check...");
-    try {
-      execSync("npm run tsc", { stdio: "inherit", cwd });
-      ui.ok("TSC check passed!");
-    } catch (e) {
-      ui.fail("TSC check failed!");
-      process.exitCode = 1;
-    }
-  }
 }
 
 async function runIterations(
@@ -104,6 +93,19 @@ async function runIterations(
     // --- Generator: fresh context every iteration; state lives on disk. ---
     const summary = await runGenerator(client, settings, cwd, task, projectPrompt, log);
     ui.dim(`Generator summary: ${summary.slice(0, 400)}${summary.length > 400 ? "..." : ""}`);
+
+    // --- TSC Check ---
+    if (!opts.dryRun) {
+      ui.step("Running tsc check...");
+      try {
+        execSync("npm run tsc", { stdio: "inherit", cwd });
+        ui.ok("TSC check passed!");
+      } catch (e) {
+        ui.fail("TSC check failed!");
+        store.update(task.id, { status: "pending" });
+        throw new Error("TSC check failed!");
+      }
+    }
 
     // --- Judge: separate model, separate context, sees diff + summary, verifies itself. ---
     const diff = await workingDiff(cwd);
