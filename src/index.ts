@@ -9,6 +9,7 @@ import { runLoop } from "./loop.js";
 import { TaskStore } from "./tasks.js";
 import { ui } from "./log.js";
 import { runUi } from "./ui_cli.js";
+import { tune } from "./tune.js";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const pkg = JSON.parse(readFileSync(resolve(here, "..", "package.json"), "utf8")) as { version: string };
@@ -97,6 +98,14 @@ program
   });
 
 program
+  .command("tune")
+  .description("Optimize settings based on the last task run log")
+  .action(async () => {
+    const cwd = process.cwd();
+    await tune(cwd);
+  });
+
+program
   .command("status")
   .description("Show task states")
   .action(() => {
@@ -107,53 +116,6 @@ program
       const mark = t.status === "done" ? "✔" : t.status === "blocked" ? "✖" : t.status === "in_progress" ? "›" : "·";
       ui.info(`${mark} ${t.id.padEnd(16)} ${t.status.padEnd(12)} attempts=${t.attempts}  ${t.title}`);
       if (t.lastCritique) ui.dim(`    last critique: ${t.lastCritique.slice(0, 200)}`);
-    }
-  });
-
-program
-  .command("config")
-  .description("Show current configuration")
-  .option("--field <path>", "Show specific setting value using colon-separated path (e.g., ollama:readyTimeoutMs)")
-  .option("--set <value>", "Set a specific configuration value")
-  .action((opts: { field?: string; set?: string }) => {
-    const cwd = process.cwd();
-    const settings = loadSettings(cwd);
-
-    if (opts.set) {
-      if (!opts.field) {
-        ui.fail("The --field switch is required when using --set");
-        process.exitCode = 1;
-        return;
-      }
-
-      let newValue: any = opts.set;
-      const trimmed = opts.set.trim();
-      if (trimmed === "true") newValue = true;
-      else if (trimmed === "false") newValue = false;
-      else if (trimmed === "null") newValue = null;
-      else if (!isNaN(Number(trimmed)) && !isNaN(parseFloat(trimmed))) newValue = Number(trimmed);
-
-      setNestedValue(settings, opts.field, newValue);
-      
-      const result = SettingsSchema.safeParse(settings);
-      if (!result.success) {
-        ui.fail(`Invalid setting value for ${opts.field}: ${result.error.message}`);
-        process.exitCode = 1;
-        return;
-      }
-
-      writeFileSync(resolve(cwd, SETTINGS_FILE), stringifySettings(settings));
-      ui.info(`Updated ${opts.field} to ${newValue}`);
-    } else if (opts.field) {
-      const value = getNestedValue(settings, opts.field);
-      if (value === undefined) {
-        ui.fail(`Setting not found: ${opts.field}`);
-        process.exitCode = 1;
-      } else {
-        ui.info(String(value));
-      }
-    } else {
-      ui.info(stringifySettings(settings));
     }
   });
 

@@ -103,7 +103,7 @@ export function setNestedValue(obj: any, path: string, value: any): void {
   let current = obj;
   for (let i = 0; i < parts.length - 1; i++) {
     const part = parts[i];
-    if (current[part] === undefined || current[part] === null || typeof current[part] !== 'object') {
+    if (current[part] === undefined || current[part] === null || typeof current !== 'object') {
       return;
     }
     current = current[part];
