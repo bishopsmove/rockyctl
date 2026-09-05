@@ -1,9 +1,9 @@
 #!/usr/bin/env node
 import { Command } from "commander";
-import { copyFileSync, existsSync, mkdirSync, readFileSync, appendFileSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, readFileSync, appendFileSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { loadSettings, getNestedValue, stringifySettings, SETTINGS_FILE } from "./config.js";
+import { loadSettings, getNestedValue, stringifySettings, SETTINGS_FILE, setNestedValue, SettingsSchema } from "./config.js";
 import { doctor } from "./doctor.js";
 import { runLoop } from "./loop.js";
 import { TaskStore } from "./tasks.js";
@@ -106,11 +106,37 @@ program
   .command("config")
   .description("Show current configuration")
   .option("--field <path>", "Show specific setting value using colon-separated path (e.g., ollama:readyTimeoutMs)")
-  .action((opts: { field?: string }) => {
+  .option("--set <value>", "Set a specific configuration value")
+  .action((opts: { field?: string; set?: string }) => {
     const cwd = process.cwd();
     const settings = loadSettings(cwd);
 
-    if (opts.field) {
+    if (opts.set) {
+      if (!opts.field) {
+        ui.fail("The --field switch is required when using --set");
+        process.exitCode = 1;
+        return;
+      }
+
+      let newValue: any = opts.set;
+      const trimmed = opts.set.trim();
+      if (trimmed === "true") newValue = true;
+      else if (trimmed === "false") newValue = false;
+      else if (trimmed === "null") newValue = null;
+      else if (!isNaN(trimmed) && !isNaN(parseFloat(trimmed))) newValue = Number(trimmed);
+
+      setNestedValue(settings, opts.field, newValue);
+      
+      const result = SettingsSchema.safeParse(settings);
+      if (!result.success) {
+        ui.fail(`Invalid setting value for ${opts.field}: ${result.error.message}`);
+        process.exitCode = 1;
+        return;
+      }
+
+      writeFileSync(resolve(cwd, SETTINGS_FILE), stringifySettings(settings));
+      ui.info(`Updated ${opts.field} to ${newValue}`);
+    } else if (opts.field) {
       const value = getNestedValue(settings, opts.field);
       if (value === undefined) {
         ui.fail(`Setting not found: ${opts.field}`);

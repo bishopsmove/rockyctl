@@ -98,6 +98,20 @@ export function getNestedValue(obj: any, path: string): any {
   return current;
 }
 
+export function setNestedValue(obj: any, path: string, value: any): void {
+  const parts = path.split(':');
+  let current = obj;
+  for (let i = 0; i < parts.length - 1; i++) {
+    const part = parts[i];
+    if (current[part] === undefined || current[part] === null || typeof current[part] !== 'object') {
+      return;
+    }
+    current = current[part];
+  }
+  const lastPart = parts[parts.length - 1];
+  current[lastPart] = value;
+}
+
 export function stringifySettings(settings: Settings): string {
   return stringify(settings);
 }
