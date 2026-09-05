@@ -3,7 +3,7 @@ import { Command } from "commander";
 import { copyFileSync, existsSync, mkdirSync, readFileSync, appendFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { loadSettings, SETTINGS_FILE } from "./config.js";
+import { loadSettings, getNestedValue, stringifySettings, SETTINGS_FILE } from "./config.js";
 import { doctor } from "./doctor.js";
 import { runLoop } from "./loop.js";
 import { TaskStore } from "./tasks.js";
@@ -99,6 +99,27 @@ program
       const mark = t.status === "done" ? "✔" : t.status === "blocked" ? "✖" : t.status === "in_progress" ? "›" : "·";
       ui.info(`${mark} ${t.id.padEnd(16)} ${t.status.padEnd(12)} attempts=${t.attempts}  ${t.title}`);
       if (t.lastCritique) ui.dim(`    last critique: ${t.lastCritique.slice(0, 200)}`);
+    }
+  });
+
+program
+  .command("config")
+  .description("Show current configuration")
+  .option("--field <path>", "Show specific setting value using colon-separated path (e.g., ollama:readyTimeoutMs)")
+  .action((opts: { field?: string }) => {
+    const cwd = process.cwd();
+    const settings = loadSettings(cwd);
+
+    if (opts.field) {
+      const value = getNestedValue(settings, opts.field);
+      if (value === undefined) {
+        ui.fail(`Setting not found: ${opts.field}`);
+        process.exitCode = 1;
+      } else {
+        ui.info(String(value));
+      }
+    } else {
+      ui.info(stringifySettings(settings));
     }
   });
 

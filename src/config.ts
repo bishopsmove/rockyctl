@@ -1,6 +1,6 @@
-import { readFileSync, existsSync } from "node:fs";
+import { readFileSync, existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { parse } from "yaml";
+import { parse, stringify } from "yaml";
 import { z } from "zod";
 
 export const SETTINGS_FILE = ".rockyctl/config/rockyctl.yaml";
@@ -84,4 +84,20 @@ export function loadSettings(cwd = process.cwd()): Settings {
     throw new Error(`Invalid ${SETTINGS_FILE}:\n${issues}`);
   }
   return result.data;
+}
+
+export function getNestedValue(obj: any, path: string): any {
+  const parts = path.split(':');
+  let current = obj;
+  for (const part of parts) {
+    if (current === null || typeof current !== 'object') {
+      return undefined;
+    }
+    current = current[part];
+  }
+  return current;
+}
+
+export function stringifySettings(settings: Settings): string {
+  return stringify(settings);
 }
