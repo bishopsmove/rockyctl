@@ -69,7 +69,7 @@ async function runIterations(
   for (let iteration = 1; iteration <= settings.loop.maxIterations; iteration++) {
     const task = opts.taskId ? store.get(opts.taskId) : store.next();
     if (!task) {
-      ui.ok(opts.taskId ? `Task ${task.id} not found.` : "No pending tasks. Done.");
+      ui.ok(opts.taskId ? `Task ${opts.taskId} not found.` : "No pending tasks. Done.");
       break;
     }
     if (opts.taskId && (task.status === "done" || task.status === "blocked")) {
