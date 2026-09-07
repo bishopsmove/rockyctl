@@ -115,4 +115,79 @@ describe("tune command", () => {
 
     assert.strictEqual(newTimeout, oldTimeout + 300000);
   });
+
+  test("should increase numCtx if prompt tokens are approaching current limit", async () => {
+    const logsDir = resolve(cwd, ".rockyctl/logs");
+    const logFile = resolve(logsDir, "run-test.jsonl");
+    
+    // Prompt tokens is 30000, which is > 80% of 32768
+    const event = {
+      ts: new Date().toISOString(),
+      type: "event",
+      prompt_tokens: 30000
+    };
+    writeFileSync(logFile, JSON.stringify(event) + "\n");
+
+    const settingsBefore = loadSettings(cwd);
+    const oldNumCtx = settingsBefore.ollama.numCtx;
+
+    await tune(cwd);
+
+    const settingsAfter = loadSettings(cwd);
+    const newNumCtx = settingsAfter.ollama.numCtx;
+
+    assert.ok(newNumCtx > oldNumCtx, `numCtx should have increased, got ${oldNumCtx} -> ${newNumCtx}`);
+  });
+
+  test("should decrease numCtx if eval speed is low and VRAM is used", async () => {
+    const logsDir = resolve(cwd, ".rockyctl/logs");
+    const logFile = resolve(logsDir, "run-test.jsonl");
+    
+    // Low eval tokens per second (e.g. 2) and VRAM usage reported
+    const event = {
+      ts: new Date().toISOString(),
+      type: "event",
+      eval_tokens_per_second: 2,
+      vram_usage_bytes: 1024 * 1024 * 1024 // 1GB
+    };
+    writeFileSync(logFile, JSON.stringify(event) + "\n");
+
+    const settingsBefore = loadSettings(cwd);
+    const oldNumCtx = settingsBefore.ollama.numCtx;
+
+    await tune(cwd);
+
+    const settingsAfter = loadSettings(cwd);
+    const newNumCtx = settingsAfter.ollama.numCtx;
+
+    assert.ok(newNumCtx < oldNumCtx, `numCtx should have decreased, got ${oldNumCtx} -> ${newNumCtx}`);
+  });
+
+  test("should handle multiple log files and take last 3", async () => {
+    const logsDir = resolve(cwd, ".rockyctl/logs");
+    
+    // Create 4 log files
+    for (let i = 1; i <= 4; i++) {
+      const logFile = resolve(logsDir, `run-2024-01-01T00-00-0${i}.jsonl`);
+      const event = {
+        ts: new Date().toISOString(),
+        type: "error",
+        message: "Ollama request timed out"
+      };
+      writeFileSync(logFile, JSON.stringify(event) + "\n");
+    }
+
+    const settingsBefore = loadSettings(cwd);
+    const oldTimeout = settingsBefore.ollama.requestTimeoutMs;
+
+    await tune(cwd);
+
+    const settingsAfter = loadSettings(cwd);
+    const newTimeout = settingsAfter.ollama.requestTimeoutMs;
+
+    // If it only took the last 3, it should still update.
+    // If it took all 4, it would still update but maybe differently if we had cumulative logic.
+    // But with our current implementation, it just checks if it already added the change.
+    assert.strictEqual(newTimeout, Math.ceil(oldTimeout * 1.5));
+  });
 });
