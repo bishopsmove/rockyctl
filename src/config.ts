@@ -15,6 +15,11 @@ const OllamaSchema = z.object({
   keepAlive: z.string().default("30m"),
   // Context window requested for generation. Generator needs room for tools + file contents.
   numCtx: z.number().int().positive().default(32_768),
+  // Retries for a chat() call after a transient network failure (connection reset/refused,
+  // 5xx). Does not apply to a deliberate requestTimeoutMs abort or an HTTP 4xx.
+  maxRetries: z.number().int().nonnegative().default(2),
+  // Base delay (ms) before the first retry; doubles each subsequent attempt.
+  retryBackoffMs: z.number().int().positive().default(1_000),
 });
 
 const ModelsSchema = z.object({

@@ -7,6 +7,10 @@ import { createServer } from "node:http";
 
 const port = Number(process.env.PORT ?? 11434);
 const slowMs = Number(process.env.SLOW_MS ?? 0);
+// RESET_ONCE=1 drops the connection mid-stream on the first generator turn, then behaves
+// normally after — used to exercise rockyctl's chat() retry path against a real socket reset.
+const resetOnce = process.env.RESET_ONCE === "1";
+let didReset = false;
 let judgeTurn = 0;
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -20,10 +24,16 @@ createServer(async (req, res) => {
     res.end(JSON.stringify(o));
   };
   const sizes = { gen: 16e9, judge: 8e9 };
-  const streamed = async (message) => {
+  const streamed = async (message, opts = {}) => {
     // Send headers now, then a few chunks: mirrors Ollama's streaming shape.
     res.writeHead(200, { "content-type": "application/x-ndjson" });
     if (slowMs) await sleep(slowMs);
+    if (opts.resetOnce && resetOnce && !didReset) {
+      didReset = true;
+      res.write(JSON.stringify({ model: body.model, message: { role: "assistant", content: "oops" }, done: false }) + "\n");
+      setTimeout(() => res.socket?.destroy(), 20);
+      return;
+    }
     const words = (message.content ?? "").split(/(?<=\s)/);
     for (const w of words) {
       if (w) res.write(JSON.stringify({ model: body.model, message: { role: "assistant", content: w }, done: false }) + "\n");
@@ -34,7 +44,7 @@ createServer(async (req, res) => {
     }
     res.end(JSON.stringify({ model: body.model, message: { role: "assistant", content: "" }, done: true, done_reason: "stop", eval_count: words.length, prompt_eval_count: 100, total_duration: 1.2e9 }) + "\n");
   };
-  const reply = (message) => (body.stream ? streamed(message) : json({ model: body.model, message, done: true }));
+  const reply = (message, opts) => (body.stream ? streamed(message, opts) : json({ model: body.model, message, done: true }));
 
   if (req.url === "/api/tags") return json({ models: [{ name: "gen:latest", size: sizes.gen }, { name: "judge:latest", size: sizes.judge }] });
   if (req.url === "/api/ps")
@@ -57,7 +67,10 @@ createServer(async (req, res) => {
   const last = body.messages.at(-1);
   if (body.model.startsWith("gen")) {
     if (last.role === "user")
-      return reply({ role: "assistant", content: "I'll create the file now.", tool_calls: [{ function: { name: "write_file", arguments: { path: "hello.txt", content: "hello\n" } } }] });
+      return reply(
+        { role: "assistant", content: "I'll create the file now.", tool_calls: [{ function: { name: "write_file", arguments: { path: "hello.txt", content: "hello\n" } } }] },
+        { resetOnce: true },
+      );
     return reply({ role: "assistant", content: "Created hello.txt containing 'hello'. Verified by reading it back." });
   }
   judgeTurn++;

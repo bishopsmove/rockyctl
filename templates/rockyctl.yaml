@@ -13,6 +13,11 @@ ollama:
   # Context window requested for each call. The generator needs room for tool schemas
   # plus whatever files it reads; raise this if you see truncation, lower it if VRAM is tight.
   numCtx: 32768
+  # Retries for a chat() call after a transient network failure (connection reset/refused,
+  # 5xx). A deliberate requestTimeoutMs abort or an HTTP 4xx is never retried.
+  maxRetries: 2
+  # Base delay (ms) before the first retry; doubles each subsequent attempt.
+  retryBackoffMs: 1000
 
 models:
   # Writes the code. Must support tool calling in Ollama (`rockyctl doctor` verifies this).

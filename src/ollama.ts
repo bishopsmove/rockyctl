@@ -51,6 +51,9 @@ export type ProgressFn = (message: string) => void;
 /** Called as tokens stream in; `tokens` is the running count for this response. */
 export type TokenFn = (info: { tokens: number; elapsedMs: number; phase: "prompt" | "generate" }) => void;
 
+/** Called before each retry sleep, once a chat() attempt has failed with a transient error. */
+export type RetryFn = (info: { attempt: number; maxAttempts: number; delayMs: number; error: string }) => void;
+
 export class OllamaError extends Error {
   constructor(message: string, public status?: number) {
     super(message);
@@ -125,7 +128,31 @@ export class OllamaClient {
       format?: "json" | Record<string, unknown>;
       temperature?: number;
       onToken?: TokenFn;
+      onRetry?: RetryFn;
     } = {},
+  ): Promise<ChatResponse> {
+    const maxAttempts = 1 + this.settings.maxRetries;
+    for (let attempt = 1; ; attempt++) {
+      try {
+        return await this.chatOnce(model, messages, opts);
+      } catch (err) {
+        if (attempt >= maxAttempts || !isRetryableChatError(err)) throw err;
+        const delayMs = this.settings.retryBackoffMs * 2 ** (attempt - 1);
+        opts.onRetry?.({ attempt, maxAttempts, delayMs, error: (err as Error).message });
+        await sleep(delayMs);
+      }
+    }
+  }
+
+  private async chatOnce(
+    model: string,
+    messages: ChatMessage[],
+    opts: {
+      tools?: ToolDefinition[];
+      format?: "json" | Record<string, unknown>;
+      temperature?: number;
+      onToken?: TokenFn;
+    },
   ): Promise<ChatResponse> {
     const body: Record<string, unknown> = {
       model,
@@ -355,6 +382,21 @@ async function* ndjsonLines(body: ReadableStream<Uint8Array>, signal: AbortSigna
   } finally {
     reader.releaseLock();
   }
+}
+
+const RETRYABLE_PATTERN =
+  /ECONNRESET|ECONNREFUSED|ETIMEDOUT|EPIPE|ECONNABORTED|EAI_AGAIN|ENOTFOUND|UND_ERR_SOCKET|socket hang up|other side closed|ended without a final chunk/i;
+
+/**
+ * Transient transport failures are worth retrying (connection reset mid-generation, refused
+ * connection, 5xx). A deliberate requestTimeoutMs abort or an HTTP 4xx are not: retrying an
+ * abort just repeats the same slow generation, and a 4xx (e.g. bad request, unsupported tools)
+ * will fail identically every time.
+ */
+function isRetryableChatError(err: unknown): boolean {
+  if (!(err instanceof OllamaError)) return false;
+  if (err.status !== undefined) return err.status >= 500;
+  return RETRYABLE_PATTERN.test(err.message);
 }
 
 /** Unwraps undici's "fetch failed" so the real cause (ECONNRESET, ECONNREFUSED, ...) is visible. */

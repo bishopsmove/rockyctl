@@ -2,7 +2,7 @@ import { readFileSync, existsSync } from "node:fs";
 import { resolve } from "node:path";
 import { execSync } from "node:child_process";
 import type { Settings } from "./config.js";
-import { OllamaClient, type ChatMessage } from "./ollama.js";
+import { OllamaClient, type ChatMessage, type RetryFn } from "./ollama.js";
 import { TaskStore, type Task } from "./tasks.js";
 import { GENERATOR_TOOLS, JUDGE_TOOLS, executeTool } from "./tools/index.js";
 import { commitAll, isDirty, isGitRepo, workingDiff, cleanupGitLock, hasUntrackedFiles, cleanUntracked } from "./tools/git.js";
@@ -167,7 +167,11 @@ async function runGenerator(
     const progress = ui.progress(`generator ${settings.models.generator}`);
     let res;
     try {
-      res = await client.chat(settings.models.generator, messages, { tools: GENERATOR_TOOLS, onToken: progress });
+      res = await client.chat(settings.models.generator, messages, {
+        tools: GENERATOR_TOOLS,
+        onToken: progress,
+        onRetry: makeRetryHandler(log, "generator", task.id),
+      });
     } finally {
       progress.done();
     }
@@ -232,7 +236,9 @@ async function runGenerator(
           content: `Tool call budget (${settings.loop.maxToolCallsPerIteration}) exhausted. Stop now and summarize what you did and what remains.`,
         }
       );
-      const final = await client.chat(settings.models.generator, messages);
+      const final = await client.chat(settings.models.generator, messages, {
+        onRetry: makeRetryHandler(log, "generator", task.id),
+      });
       log.event("generator.turn", { task: task.id, model: settings.models.generator, content: final.message.content, budgetExhausted: true });
       return final.message.content ?? "";
     }
@@ -258,7 +264,12 @@ async function runJudge(
     const progress = ui.progress(`judge ${settings.models.judge}`);
     let res;
     try {
-      res = await client.chat(settings.models.judge, messages, { tools: JUDGE_TOOLS, temperature: 0, onToken: progress });
+      res = await client.chat(settings.models.judge, messages, {
+        tools: JUDGE_TOOLS,
+        temperature: 0,
+        onToken: progress,
+        onRetry: makeRetryHandler(log, "judge", task.id),
+      });
     } finally {
       progress.done();
     }
@@ -323,7 +334,11 @@ async function runJudge(
     }
     // Model chatted instead of returning JSON: ask once more with JSON mode forced.
     messages.push({ role: "user", content: "Return ONLY the JSON verdict object now." });
-    const retry = await client.chat(settings.models.judge, messages, { format: "json", temperature: 0 });
+    const retry = await client.chat(settings.models.judge, messages, {
+      format: "json",
+      temperature: 0,
+      onRetry: makeRetryHandler(log, "judge", task.id),
+    });
     const parsed2 = parseVerdict(retry.message.content ?? "");
     log.event("verdict", { task: task.id, ...(parsed2 ?? { pass: false, critique: "unparseable" }), raw: retry.message.content });
     return parsed2 ?? { pass: false, critique: `Judge returned an unparseable verdict: ${retry.message.content?.slice(0, 500)}` };
@@ -340,6 +355,14 @@ function parseVerdict(text: string): Verdict | undefined {
   } catch {
     return undefined;
   }
+}
+
+/** Surfaces a chat() retry to both the console and the run log instead of letting it pass silently. */
+function makeRetryHandler(log: RunLog, role: "generator" | "judge", taskId: string): RetryFn {
+  return ({ attempt, maxAttempts, delayMs, error }) => {
+    ui.warn(`${role} request failed (attempt ${attempt}/${maxAttempts}): ${error} — retrying in ${(delayMs / 1000).toFixed(1)}s`);
+    log.event("retry", { role, task: taskId, attempt, maxAttempts, delayMs, error });
+  };
 }
 
 function describeArgs(args: Record<string, unknown>): string {
