@@ -173,13 +173,25 @@ async function runGenerator(
     }
     const msg = res.message;
     messages.push(msg);
+
+    const prompt_eval_duration_ms = res.prompt_eval_duration ? Math.round(res.prompt_eval_duration / 1e6) : undefined;
+    const eval_duration_ms = res.eval_duration ? Math.round(res.eval_duration / 1e6) : undefined;
+    const total_duration_ms = res.total_duration ? Math.round(res.total_duration / 1e6) : undefined;
+    let tokens_per_second;
+    if (res.eval_count && eval_duration_ms && eval_duration_ms > 0) {
+      tokens_per_second = res.eval_count / (eval_duration_ms / 1000);
+    }
+
     log.event("generator.turn", {
       task: task.id,
       content: msg.content,
       tool_calls: msg.tool_calls,
       prompt_eval_count: res.prompt_eval_count,
       eval_count: res.eval_count,
-      total_duration_ms: res.total_duration ? Math.round(res.total_duration / 1e6) : undefined,
+      prompt_eval_duration_ms,
+      eval_duration_ms,
+      total_duration_ms,
+      tokens_per_second: tokens_per_second ? Math.round(tokens_per_second * 100) / 100 : undefined,
     });
 
     if (!msg.tool_calls?.length) return msg.content ?? "";
@@ -194,10 +206,12 @@ async function runGenerator(
       messages.push({ role: "tool", content: result, tool_name: name });
     }
     if (toolCalls >= settings.loop.maxToolCallsPerIteration) {
-      messages.push({
-        role: "user",
-        content: `Tool call budget (${settings.loop.maxToolCallsPerIteration}) exhausted. Stop now and summarize what you did and what remains.`,
-      });
+      messages.push(
+        {
+          role: "user",
+          content: `Tool call budget (${settings.loop.maxToolCallsPerIteration}) exhausted. Stop now and summarize what you did and what remains.`,
+        }
+      );
       const final = await client.chat(settings.models.generator, messages);
       log.event("generator.turn", { task: task.id, content: final.message.content, budgetExhausted: true });
       return final.message.content ?? "";
@@ -230,7 +244,26 @@ async function runJudge(
     }
     const msg = res.message;
     messages.push(msg);
-    log.event("judge.turn", { task: task.id, content: msg.content, tool_calls: msg.tool_calls });
+
+    const prompt_eval_duration_ms = res.prompt_eval_duration ? Math.round(res.prompt_eval_duration / 1e6) : undefined;
+    const eval_duration_ms = res.eval_duration ? Math.round(res.eval_duration / 1e6) : undefined;
+    const total_duration_ms = res.total_duration ? Math.round(res.total_duration / 1e6) : undefined;
+    let tokens_per_second;
+    if (res.eval_count && eval_duration_ms && eval_duration_ms > 0) {
+      tokens_per_second = res.eval_count / (eval_duration_ms / 1000);
+    }
+
+    log.event("judge.turn", { 
+      task: task.id, 
+      content: msg.content, 
+      tool_calls: msg.tool_calls,
+      prompt_eval_count: res.prompt_eval_count,
+      eval_count: res.eval_count,
+      prompt_eval_duration_ms,
+      eval_duration_ms,
+      total_duration_ms,
+      tokens_per_second: tokens_per_second ? Math.round(tokens_per_second * 100) / 100 : undefined,
+    });
 
     if (msg.tool_calls?.length && toolCalls < settings.loop.maxToolCallsPerIteration) {
       for (const call of msg.tool_calls) {
