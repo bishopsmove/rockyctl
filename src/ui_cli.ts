@@ -10,7 +10,7 @@ export async function runUi(program: Command) {
   });
 
   console.log("\n--- Rockyctl UI ---");
-  console.log("Commands: /doctor, /status, /config, /run, /exit, /help");
+  console.log("Commands: /doctor, /status, /config, /run, /tune, /exit, /help");
   console.log("Commands must start with / (e.g. /doctor)");
   console.log("------------------\n");
 
@@ -25,7 +25,9 @@ export async function runUi(program: Command) {
         return;
       }
 
-      const command = input.substring(1).trim();
+      const commandPart = input.substring(1).trim();
+      const parts = commandPart.split(/\s+/);
+      const command = parts[0];
 
       if (command === "exit") {
         rl.close();
@@ -34,21 +36,21 @@ export async function runUi(program: Command) {
       }
 
       if (command === "help") {
-        console.log("Available commands:\n/doctor, /status, /config, /run, /exit, /help");
+        console.log("Available commands:\n/doctor, /status, /config, /run, /tune, /exit, /help");
         rl.prompt();
         return;
       }
 
       const originalArgv = [...process.argv];
       
-      // We want to mimic: rockyctl <command>
+      // We want to mimic: rockyctl <command> <args...>
       // process.argv[0] is the executable (e.g. node)
       // process.argv[1] is the script (e.g. index.ts)
       // We replace the command which is at index 2 (or 3 if we include tsx/node)
       // Actually, originalArgv has [node, script, 'ui', ...]
-      // We want [node, script, command]
+      // We want [node, script, command, ...args]
       
-      const newArgv = [originalArgv[0], originalArgv[1], command];
+      const newArgv = [originalArgv[0], originalArgv[1], ...parts];
       
       process.argv = newArgv;
       

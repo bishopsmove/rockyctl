@@ -61,6 +61,38 @@ describe("rockyctl ui", () => {
   test("ui command handles /help", async () => {
     const result = await runCommandWithInput(["ui"], ["/help", "/exit"]);
     assert.ok(result.stdout.includes("Available commands"), "Should show help information");
+    assert.ok(result.stdout.includes("/tune"), "Should include /tune in help");
     assert.equal(result.exitCode, 0);
+  });
+
+  test("ui command handles all available commands", async () => {
+    // /doctor
+    const resDoctor = await runCommandWithInput(["ui"], ["/doctor", "/exit"]);
+    assert.equal(resDoctor.exitCode, 0);
+    
+    // /status
+    const resStatus = await runCommandWithInput(["ui"], ["/status", "/exit"]);
+    assert.equal(resStatus.exitCode, 0);
+
+    // /tune
+    const resTune = await runCommandWithInput(["ui"], ["/tune", "/exit"]);
+    assert.equal(resTune.exitCode, 0);
+
+    // /run (using --dry-run to keep it fast and avoid side effects)
+    // Wait, I can't easily pass options to a command through UI if UI just prepends command name.
+    // The current implementation of runUi does:
+    // const newArgv = [originalArgv[0], originalArgv[1], command];
+    // So it calls `rockyctl tune` if I type `/tune`.
+    // If I want to pass options, it's tricky in the current implementation.
+    // But I can try just `/run`.
+    // Actually, the requirement is "check for all the available commands".
+    
+    // Let's see if we can test /run with /dry-run via UI if possible.
+    // If I type `/run --dry-run`, then command will be `run --dry-run`.
+    // newArgv will be [node, script, "run --dry-run"]
+    // commander might not handle "run --dry-run" as a single command if it's passed as the 3rd arg.
+    // Let's check if `/run --dry-run` works in UI.
+    const resRun = await runCommandWithInput(["ui"], ["/run --dry-run", "/exit"]);
+    assert.equal(resRun.exitCode, 0);
   });
 });
