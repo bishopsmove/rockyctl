@@ -177,13 +177,31 @@ async function runGenerator(
     const prompt_eval_duration_ms = res.prompt_eval_duration ? Math.round(res.prompt_eval_duration / 1e6) : undefined;
     const eval_duration_ms = res.eval_duration ? Math.round(res.eval_duration / 1e6) : undefined;
     const total_duration_ms = res.total_duration ? Math.round(res.total_duration / 1e6) : undefined;
-    let tokens_per_second;
+    
+    let eval_tokens_per_second;
     if (res.eval_count && eval_duration_ms && eval_duration_ms > 0) {
-      tokens_per_second = res.eval_count / (eval_duration_ms / 1000);
+      eval_tokens_per_second = res.eval_count / (eval_duration_ms / 1000);
+    }
+
+    let prompt_tokens_per_second;
+    if (res.prompt_eval_count && prompt_eval_duration_ms && prompt_eval_duration_ms > 0) {
+      prompt_tokens_per_second = res.prompt_eval_count / (prompt_eval_duration_ms / 1000);
+    }
+
+    let vram_usage_bytes;
+    try {
+      const loaded = await client.loadedModels();
+      const modelInfo = loaded.find(m => m.name === settings.models.generator);
+      if (modelInfo) {
+        vram_usage_bytes = modelInfo.size_vram;
+      }
+    } catch (e) {
+      // ignore
     }
 
     log.event("generator.turn", {
       task: task.id,
+      model: settings.models.generator,
       content: msg.content,
       tool_calls: msg.tool_calls,
       prompt_eval_count: res.prompt_eval_count,
@@ -191,7 +209,9 @@ async function runGenerator(
       prompt_eval_duration_ms,
       eval_duration_ms,
       total_duration_ms,
-      tokens_per_second: tokens_per_second ? Math.round(tokens_per_second * 100) / 100 : undefined,
+      prompt_tokens_per_second: prompt_tokens_per_second ? Math.round(prompt_tokens_per_second * 100) / 100 : undefined,
+      eval_tokens_per_second: eval_tokens_per_second ? Math.round(eval_tokens_per_second * 100) / 100 : undefined,
+      vram_usage_bytes,
     });
 
     if (!msg.tool_calls?.length) return msg.content ?? "";
@@ -213,7 +233,7 @@ async function runGenerator(
         }
       );
       const final = await client.chat(settings.models.generator, messages);
-      log.event("generator.turn", { task: task.id, content: final.message.content, budgetExhausted: true });
+      log.event("generator.turn", { task: task.id, model: settings.models.generator, content: final.message.content, budgetExhausted: true });
       return final.message.content ?? "";
     }
   }
@@ -248,13 +268,31 @@ async function runJudge(
     const prompt_eval_duration_ms = res.prompt_eval_duration ? Math.round(res.prompt_eval_duration / 1e6) : undefined;
     const eval_duration_ms = res.eval_duration ? Math.round(res.eval_duration / 1e6) : undefined;
     const total_duration_ms = res.total_duration ? Math.round(res.total_duration / 1e6) : undefined;
-    let tokens_per_second;
+
+    let eval_tokens_per_second;
     if (res.eval_count && eval_duration_ms && eval_duration_ms > 0) {
-      tokens_per_second = res.eval_count / (eval_duration_ms / 1000);
+      eval_tokens_per_second = res.eval_count / (eval_duration_ms / 1000);
+    }
+
+    let prompt_tokens_per_second;
+    if (res.prompt_eval_count && prompt_eval_duration_ms && prompt_eval_duration_ms > 0) {
+      prompt_tokens_per_second = res.prompt_eval_count / (prompt_eval_duration_ms / 1000);
+    }
+
+    let vram_usage_bytes;
+    try {
+      const loaded = await client.loadedModels();
+      const modelInfo = loaded.find(m => m.name === settings.models.judge);
+      if (modelInfo) {
+        vram_usage_bytes = modelInfo.size_vram;
+      }
+    } catch (e) {
+      // ignore
     }
 
     log.event("judge.turn", { 
       task: task.id, 
+      model: settings.models.judge,
       content: msg.content, 
       tool_calls: msg.tool_calls,
       prompt_eval_count: res.prompt_eval_count,
@@ -262,7 +300,9 @@ async function runJudge(
       prompt_eval_duration_ms,
       eval_duration_ms,
       total_duration_ms,
-      tokens_per_second: tokens_per_second ? Math.round(tokens_per_second * 100) / 100 : undefined,
+      prompt_tokens_per_second: prompt_tokens_per_second ? Math.round(prompt_tokens_per_second * 100) / 100 : undefined,
+      eval_tokens_per_second: eval_tokens_per_second ? Math.round(eval_tokens_per_second * 100) / 100 : undefined,
+      vram_usage_bytes,
     });
 
     if (msg.tool_calls?.length && toolCalls < settings.loop.maxToolCallsPerIteration) {
