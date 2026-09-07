@@ -11,6 +11,7 @@ export interface Task {
   status: TaskStatus;
   attempts: number;
   lastCritique?: string;
+  dependencies?: string[];
 }
 
 /**
@@ -39,6 +40,7 @@ export class TaskStore {
         status: (t.status as TaskStatus) ?? "pending",
         attempts: Number(t.attempts ?? 0),
         lastCritique: t.lastCritique,
+        dependencies: t.dependencies as string[] | undefined,
       };
     });
   }

@@ -7,6 +7,7 @@
 #
 # status: pending | in_progress | done | blocked   (managed by rockyctl; edit to re-queue)
 # attempts / lastCritique                          (managed by rockyctl)
+# dependencies: array of task ids                    (optional)
 
 tasks:
   - id: example-1
@@ -17,5 +18,13 @@ tasks:
     criteria:
       - A GET /hello route exists and returns {"message":"hello"} with status 200.
       - A test covers the new route and `npm test` passes.
+    status: pending
+    attempts: 0
+  - id: example-2
+    title: Add another endpoint
+    description: |
+      Add a GET /goodbye route.
+    dependencies:
+      - example-1
     status: pending
     attempts: 0
