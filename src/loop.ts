@@ -103,7 +103,7 @@ async function runIterations(
       } catch (e) {
         ui.fail("TSC check failed!");
         store.update(task.id, { status: "pending" });
-        throw new Error("TSC check failed!");
+        continue;
       }
     }
 
