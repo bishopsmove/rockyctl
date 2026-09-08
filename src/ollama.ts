@@ -385,7 +385,7 @@ async function* ndjsonLines(body: ReadableStream<Uint8Array>, signal: AbortSigna
 }
 
 const RETRYABLE_PATTERN =
-  /ECONNRESET|ECONNREFUSED|ETIMEDOUT|EPIPE|ECONNABORTED|EAI_AGAIN|ENOTFOUND|UND_ERR_SOCKET|socket hang up|other side closed|ended without a final chunk/i;
+  /ECONNRESET|ECONNREFUSED|ETIMEDOUT|EPIPE|ECONNABORTED|EAI_AGAIN|ENOTFOUND|UND_ERR_SOCKET|ENETUNREACH|socket hang up|other side closed|ended without a final chunk/i;
 
 /**
  * Transient transport failures are worth retrying (connection reset mid-generation, refused
