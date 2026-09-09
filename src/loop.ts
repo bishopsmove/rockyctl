@@ -102,8 +102,16 @@ async function runIterations(
         ui.ok("TSC check passed!");
       } catch (e) {
         ui.fail("TSC check failed!");
-        store.update(task.id, { status: "pending" });
-        throw new Error("TSC check failed!");
+        store.update(task.id, { status: "pending", lastCritique: "TSC check failed" });
+        log.event("tsc_error", { message: "TSC check failed" });
+
+        // Cleanup test-created assets (important before continue)
+        const hasUntracked = await hasUntrackedFiles(cwd);
+        if (hasUntracked) {
+          ui.dim("Cleaning up untracked assets...");
+          await cleanUntracked(cwd);
+        }
+        continue;
       }
     }
 
