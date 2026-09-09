@@ -47,7 +47,19 @@ export class TaskStore {
 
   next(): Task | undefined {
     const tasks = this.list();
-    return tasks.find((t) => t.status === "in_progress") ?? tasks.find((t) => t.status === "pending");
+    const inProgress = tasks.find((t) => t.status === "in_progress");
+    if (inProgress) return inProgress;
+
+    for (const t of tasks) {
+      if (t.status === "pending") {
+        const depStatus = this.checkDependencies(t);
+        if (depStatus === 'done' || depStatus === 'blocked') {
+          return t;
+        }
+      }
+    }
+
+    return undefined;
   }
 
   get(id: string): Task | undefined {
@@ -70,5 +82,35 @@ export class TaskStore {
     const s: Record<TaskStatus, number> = { pending: 0, in_progress: 0, done: 0, blocked: 0 };
     for (const t of this.list()) s[t.status] = (s[t.status] ?? 0) + 1;
     return s;
+  }
+
+  checkDependencies(task: Task): 'done' | 'pending' | 'blocked' {
+    if (!task.dependencies || task.dependencies.length === 0) {
+      return 'done';
+    }
+
+    let anyPending = false;
+
+    for (const depId of task.dependencies) {
+      const depTask = this.get(depId);
+      
+      if (!depTask) {
+        return 'blocked'; // Treat missing dependencies as blocked
+      }
+
+      if (depTask.status === 'blocked' || depTask.lastCritique) {
+        return 'blocked';
+      }
+
+      if (depTask.status === 'pending' || depTask.status === 'in_progress') {
+        anyPending = true;
+      }
+    }
+
+    if (anyPending) {
+      return 'pending';
+    }
+
+    return 'done';
   }
 }
