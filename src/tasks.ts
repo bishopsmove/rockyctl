@@ -1,7 +1,7 @@
 import { readFileSync, writeFileSync, existsSync } from "node:fs";
 import { parseDocument, isSeq, isMap, type Document } from "yaml";
 
-export type TaskStatus = "pending" | "in_progress" | "done" | "blocked";
+export type TaskStatus = "pending" | "in_progress" | "done" | "blocked" | "skip";
 
 export interface Task {
   id: string;
@@ -78,9 +78,12 @@ export class TaskStore {
     writeFileSync(this.path, this.doc.toString({ lineWidth: 0 }), "utf8");
   }
 
-  summary(): Record<TaskStatus, number> {
-    const s: Record<TaskStatus, number> = { pending: 0, in_progress: 0, done: 0, blocked: 0 };
-    for (const t of this.list()) s[t.status] = (s[t.status] ?? 0) + 1;
+  summary(): Record<string, number> {
+    const s: Record<string, number> = { pending: 0, in_progress: 0, done: 0, blocked: 0, skip: 0 };
+    for (const t of this.list()) {
+      const status = t.status as string;
+      s[status] = (s[status] ?? 0) + 1;
+    }
     return s;
   }
 
