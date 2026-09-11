@@ -133,9 +133,9 @@ export class OllamaClient {
   }
 
   /**
-   * Streaming chat. Streaming matters for two reasons: Ollama sends headers immediately, so
-   * no intermediary can mistake a long generation for a dead connection, and we can show
-   * progress on a slow local model. Content and tool_calls are accumulated into one message.
+   * Streaming chat. Streaming matters for two reasons: Ollama sends headers immediately, so no
+   * intermediary can mistake a long generation for a dead connection, and we can show progress
+   * on a slow local model. Content and tool_calls are accumulated into one message.
    */
   async chat(
     model: string,
@@ -169,6 +169,7 @@ export class OllamaClient {
       format?: "json" | Record<string, unknown>;
       temperature?: number;
       onToken?: TokenFn;
+      onRetry?: RetryFn;
     },
   ): Promise<ChatResponse> {
     const body: Record<string, unknown> = {
@@ -247,7 +248,7 @@ export class OllamaClient {
    * Non-streaming one-shot generation via /api/generate. Used for prompts that don't need
    * tool calling or streaming progress. Honours the `ollama.thinkEffort` setting: when it
    * is present the top-level `think` field is set to its value; when it is absent the
-   * field is omitted.
+   * field is omitted entirely so Ollama uses its own default.
    */
   async generate(
     model: string,
@@ -347,7 +348,7 @@ export class OllamaClient {
     if (!available) {
       throw new OllamaError(
         `Ollama at ${this.baseUrl} did not respond within ${this.settings.readyTimeoutMs}ms` +
-          (lastErr instanceof Error ? ` (${lastErr.message})` : ""),
+          ` (${lastErr instanceof Error ? lastErr.message : String(lastErr)})`,
       );
     }
     progress(`Server up. ${available.length} model(s) installed.`);
@@ -361,10 +362,27 @@ export class OllamaClient {
       );
     }
 
+    // Check what's already loaded to avoid redundant warming
+    let loadedModels: LoadedModel[] = [];
+    try {
+      loadedModels = await this.loadedModels(remaining());
+    } catch (err) {
+      // If we can't query /api/ps, we'll assume nothing is loaded to be safe
+    }
+
     for (const model of [...new Set(models)]) {
       if (remaining() <= 0) {
         throw new OllamaError(`Timed out before warming ${model} (readyTimeoutMs=${this.settings.readyTimeoutMs})`);
       }
+
+      const isLoaded = loadedModels.some(
+        (l) => l.name === model || l.name === `${model}:latest`,
+      );
+      if (isLoaded) {
+        progress(`${model} is already loaded.`);
+        continue;
+      }
+
       progress(`Loading ${model} into memory ...`);
       const started = Date.now();
       try {
@@ -411,8 +429,6 @@ export class OllamaClient {
       }
       throw new OllamaError(`${init.method} ${path} failed: ${describeError(err)}`);
     } finally {
-      // Streaming callers pass their own controller and keep their own timer; we only
-      // clear ours here, which is harmless for them because their timer is separate.
       clearTimeout(ownTimer);
     }
   }
@@ -444,30 +460,24 @@ async function* ndjsonLines(body: ReadableStream<Uint8Array>, signal: AbortSigna
 }
 
 const RETRYABLE_PATTERN =
-  /ECONNRESET|ECONNREFUSED|ETIMEDOUT|EPIPE|ECONNABORTED|EAI_AGAIN|ENOTFOUND|UND_ERR_SOCKET|ENETUNREACH|socket hang up|other side closed|ended without a final chunk/i;
+  /ECONNRESET|ECONNREFUSED|ETIMEDOUT|EPIPE|ECONNABORTED|EAI_AGAIN|ENOTFOUND|UND_ERR_SOCKET|socket hang up|other side closed|ended without a final chunk/i;
 
-/**
- * Transient transport failures are worth retrying (connection reset mid-generation, refused
- * connection, 5xx). A deliberate requestTimeoutMs abort or an HTTP 4xx are not: retrying an
- * abort just repeats the same slow generation, and a 4xx (e.g. bad request, unsupported tools)
- * will fail identically every time.
- */
 function isRetryableChatError(err: unknown): boolean {
   if (!(err instanceof OllamaError)) return false;
   if (err.status !== undefined) return err.status >= 500;
   return RETRYABLE_PATTERN.test(err.message);
 }
 
-/** Unwraps undici's "fetch failed" so the real cause (ECONNRESET, ECONNREFUSED, ...) is visible. */
 export function describeError(err: unknown): string {
   if (!(err instanceof Error)) return String(err);
   const parts = [err.message];
-  let cause: unknown = (err as { cause?: unknown }).cause;
+  let cause = (err as { cause?: unknown }).cause;
   let depth = 0;
-  while (cause instanceof Error && depth++ < 4) {
+  while (cause instanceof Error && depth < 4) {
     const code = (cause as { code?: unknown }).code;
     parts.push(`${code ? `[${code}] ` : ""}${cause.message}`);
     cause = (cause as { cause?: unknown }).cause;
+    depth++;
   }
   return parts.join(" <- ");
 }
