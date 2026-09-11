@@ -5,7 +5,7 @@ import type { AddressInfo } from "node:net";
 import { OllamaClient, describeError } from "../src/ollama.js";
 import { SettingsSchema } from "../src/config.js";
 
-function settings(baseUrl: string, over: Partial<{ requestTimeoutMs: number; maxRetries: number; retryBackoffMs: number }> = {}) {
+function settings(baseUrl: string, over: Partial<{ requestTimeoutMs: number; maxRetries: number; retryBackoffMs: number; thinkEffort?: "low" | "medium" | "high" | boolean }> = {}) {
   // Tests that aren't exercising retry behaviour don't want it: it would just slow them down.
   return SettingsSchema.parse({ ollama: { baseUrl, maxRetries: 0, ...over } }).ollama;
 }
@@ -171,4 +171,99 @@ test("describeError unwraps causes", () => {
   const inner = Object.assign(new Error("connect ECONNRESET"), { code: "ECONNRESET" });
   const outer = new TypeError("fetch failed", { cause: inner });
   assert.equal(describeError(outer), "fetch failed <- [ECONNRESET] connect ECONNRESET");
+});
+
+test("chat sends the top-level think field when thinkEffort is set", async () => {
+  let receivedBody: Record<string, unknown> | undefined;
+  const server = createServer((req, res) => {
+    let raw = "";
+    req.on("data", (chunk) => { raw += chunk; });
+    req.on("end", () => {
+      receivedBody = JSON.parse(raw);
+      res.writeHead(200, { "content-type": "application/x-ndjson" });
+      res.end(JSON.stringify({ message: { role: "assistant", content: "ok" }, done: true }) + "\n");
+    });
+  });
+  await new Promise<void>((r) => server.listen(0, r));
+  const port = (server.address() as AddressInfo).port;
+  try {
+    const client = new OllamaClient(settings(`http://127.0.0.1:${port}`, { thinkEffort: "high" }));
+    await client.chat("m", [{ role: "user", content: "hi" }]);
+    assert.ok(receivedBody, "server should have received the chat request");
+    assert.equal(receivedBody.think, "high");
+  } finally {
+    server.close();
+  }
+});
+
+test("chat omits the think field when thinkEffort is absent", async () => {
+  let receivedBody: Record<string, unknown> | undefined;
+  const server = createServer((req, res) => {
+    let raw = "";
+    req.on("data", (chunk) => { raw += chunk; });
+    req.on("end", () => {
+      receivedBody = JSON.parse(raw);
+      res.writeHead(200, { "content-type": "application/x-ndjson" });
+      res.end(JSON.stringify({ message: { role: "assistant", content: "ok" }, done: true }) + "\n");
+    });
+  });
+  await new Promise<void>((r) => server.listen(0, r));
+  const port = (server.address() as AddressInfo).port;
+  try {
+    const client = new OllamaClient(settings(`http://127.0.0.1:${port}`));
+    await client.chat("m", [{ role: "user", content: "hi" }]);
+    assert.ok(receivedBody, "server should have received the chat request");
+    assert.ok(!("think" in receivedBody), "think field must be omitted when thinkEffort is not set");
+  } finally {
+    server.close();
+  }
+});
+
+test("generate sends the top-level think field for string and boolean thinkEffort values", async () => {
+  const seen: unknown[] = [];
+  const server = createServer((req, res) => {
+    let raw = "";
+    req.on("data", (chunk) => { raw += chunk; });
+    req.on("end", () => {
+      const body = JSON.parse(raw) as Record<string, unknown>;
+      seen.push(body.think);
+      res.writeHead(200, { "content-type": "application/json" });
+      res.end(JSON.stringify({ response: "ok", done: true }));
+    });
+  });
+  await new Promise<void>((r) => server.listen(0, r));
+  const port = (server.address() as AddressInfo).port;
+  try {
+    for (const value of ["low" as const, true, false]) {
+      const client = new OllamaClient(settings(`http://127.0.0.1:${port}`, { thinkEffort: value }));
+      const res = await client.generate("m", "hello");
+      assert.equal(res.done, true);
+    }
+    assert.deepEqual(seen, ["low", true, false]);
+  } finally {
+    server.close();
+  }
+});
+
+test("generate omits the think field when thinkEffort is absent", async () => {
+  let receivedBody: Record<string, unknown> | undefined;
+  const server = createServer((req, res) => {
+    let raw = "";
+    req.on("data", (chunk) => { raw += chunk; });
+    req.on("end", () => {
+      receivedBody = JSON.parse(raw);
+      res.writeHead(200, { "content-type": "application/json" });
+      res.end(JSON.stringify({ response: "ok", done: true }));
+    });
+  });
+  await new Promise<void>((r) => server.listen(0, r));
+  const port = (server.address() as AddressInfo).port;
+  try {
+    const client = new OllamaClient(settings(`http://127.0.0.1:${port}`));
+    await client.generate("m", "hello");
+    assert.ok(receivedBody, "server should have received the generate request");
+    assert.ok(!("think" in receivedBody), "think field must be omitted when thinkEffort is not set");
+  } finally {
+    server.close();
+  }
 });

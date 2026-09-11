@@ -18,6 +18,10 @@ ollama:
   maxRetries: 2
   # Base delay (ms) before the first retry; doubles each subsequent attempt.
   retryBackoffMs: 1000
+  # Reasoning effort for models that support extended thinking. Sent as the top-level
+  # `think` field on /api/chat and /api/generate requests. Accepts "low", "medium",
+  # "high", true or false. When this key is omitted, the `think` field is not sent at all.
+  # thinkEffort: low
 
 models:
   # Writes the code. Must support tool calling in Ollama (`rockyctl doctor` verifies this).

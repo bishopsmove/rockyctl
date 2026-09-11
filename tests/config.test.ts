@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { writeFileSync, mkdirSync, rmSync, existsSync } from "node:fs";
 import { resolve, join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
-import { loadSettings } from "../src/config.js";
+import { loadSettings, SettingsSchema } from "../src/config.js";
 import { tmpdir } from "node:os";
 import { execSync } from "node:child_process";
 
@@ -99,4 +99,70 @@ files:
   } finally {
     rmSync(testDir, { recursive: true, force: true });
   }
+});
+
+function settingsDirWith(content: string): string {
+  const testDir = resolve(tmpdir(), "rockyctl-test-" + Date.now().toString() + "-" + Math.random().toString(36).slice(2));
+  const configDir = resolve(testDir, ".rockyctl", "config");
+  mkdirSync(configDir, { recursive: true });
+  writeFileSync(resolve(configDir, "rockyctl.yaml"), content);
+  return testDir;
+}
+
+test("thinkEffort setting loads when present under the ollama section", () => {
+  const testDir = settingsDirWith(`
+ollama:
+  baseUrl: http://localhost:11434
+  thinkEffort: high
+`);
+  try {
+    const settings = loadSettings(testDir);
+    assert.strictEqual(settings.ollama.thinkEffort, "high");
+  } finally {
+    rmSync(testDir, { recursive: true, force: true });
+  }
+});
+
+test("thinkEffort accepts low, medium, high and boolean values", () => {
+  const parsed = SettingsSchema.parse({
+    ollama: { baseUrl: "http://localhost:11434", thinkEffort: "low" },
+  });
+  assert.strictEqual(parsed.ollama.thinkEffort, "low");
+
+  const parsed2 = SettingsSchema.parse({
+    ollama: { baseUrl: "http://localhost:11434", thinkEffort: "medium" },
+  });
+  assert.strictEqual(parsed2.ollama.thinkEffort, "medium");
+
+  const parsedTrue = SettingsSchema.parse({
+    ollama: { baseUrl: "http://localhost:11434", thinkEffort: true },
+  });
+  assert.strictEqual(parsedTrue.ollama.thinkEffort, true);
+
+  const parsedFalse = SettingsSchema.parse({
+    ollama: { baseUrl: "http://localhost:11434", thinkEffort: false },
+  });
+  assert.strictEqual(parsedFalse.ollama.thinkEffort, false);
+});
+
+test("thinkEffort defaults to absent when not in the settings file", () => {
+  const testDir = settingsDirWith(`
+ollama:
+  baseUrl: http://localhost:11434
+`);
+  try {
+    const settings = loadSettings(testDir);
+    assert.ok(!("thinkEffort" in settings.ollama) || settings.ollama.thinkEffort === undefined);
+  } finally {
+    rmSync(testDir, { recursive: true, force: true });
+  }
+});
+
+test("invalid thinkEffort values are rejected", () => {
+  assert.throws(
+    () => SettingsSchema.parse({ ollama: { baseUrl: "http://localhost:11434", thinkEffort: "maximum" } }),
+  );
+  assert.throws(
+    () => SettingsSchema.parse({ ollama: { baseUrl: "http://localhost:11434", thinkEffort: 42 } }),
+  );
 });

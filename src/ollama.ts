@@ -32,6 +32,18 @@ export interface ChatResponse {
   total_duration?: number;
 }
 
+export interface GenerateResponse {
+  response: string;
+  done: boolean;
+  done_reason?: string;
+  prompt_eval_count?: number;
+  prompt_eval_duration?: number;
+  eval_count?: number;
+  eval_duration?: number;
+  total_duration?: number;
+  error?: string;
+}
+
 export interface ModelInfo {
   name: string;
   size: number;
@@ -76,6 +88,11 @@ export class OllamaClient {
       connectTimeout: 10_000,
       keepAliveTimeout: 60_000,
     });
+  }
+
+  /** The `think` field to include on generation requests, or undefined to omit it. */
+  private get think(): boolean | "low" | "medium" | "high" | undefined {
+    return this.settings.thinkEffort;
   }
 
   /** Cheap reachability probe. Resolves to the model list, rejects if the server is down. */
@@ -166,6 +183,9 @@ export class OllamaClient {
     };
     if (opts.tools?.length) body.tools = opts.tools;
     if (opts.format) body.format = opts.format;
+    // Only send `think` when the user opted in via `ollama.thinkEffort`; when that
+    // setting is absent the field is omitted entirely so Ollama uses its own default.
+    if (this.think !== undefined) body.think = this.think;
 
     const started = Date.now();
     const controller = new AbortController();
@@ -221,6 +241,45 @@ export class OllamaClient {
     } finally {
       clearTimeout(timer);
     }
+  }
+
+  /**
+   * Non-streaming one-shot generation via /api/generate. Used for prompts that don't need
+   * tool calling or streaming progress. Honours the `ollama.thinkEffort` setting: when it
+   * is present the top-level `think` field is set to its value; when it is absent the
+   * field is omitted.
+   */
+  async generate(
+    model: string,
+    prompt: string,
+    opts: {
+      system?: string;
+      format?: "json" | Record<string, unknown>;
+      temperature?: number;
+    } = {},
+  ): Promise<GenerateResponse> {
+    const body: Record<string, unknown> = {
+      model,
+      prompt,
+      stream: false,
+      keep_alive: this.settings.keepAlive,
+      options: {
+        num_ctx: this.settings.numCtx,
+        ...(opts.temperature !== undefined ? { temperature: opts.temperature } : {}),
+      },
+    };
+    if (opts.system) body.system = opts.system;
+    if (opts.format) body.format = opts.format;
+    if (this.think !== undefined) body.think = this.think;
+
+    const res = await this.fetch(
+      "/api/generate",
+      { method: "POST", body: JSON.stringify(body) },
+      this.settings.requestTimeoutMs,
+    );
+    const result = (await res.json()) as GenerateResponse;
+    if (result.error) throw new OllamaError(`Ollama error during generation: ${result.error}`);
+    return result;
   }
 
   /**
@@ -406,7 +465,7 @@ export function describeError(err: unknown): string {
   let cause: unknown = (err as { cause?: unknown }).cause;
   let depth = 0;
   while (cause instanceof Error && depth++ < 4) {
-    const code = (cause as { code?: string }).code;
+    const code = (cause as { code?: unknown }).code;
     parts.push(`${code ? `[${code}] ` : ""}${cause.message}`);
     cause = (cause as { cause?: unknown }).cause;
   }
