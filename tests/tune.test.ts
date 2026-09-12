@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { writeFileSync, existsSync, mkdirSync, rmSync } from "node:fs";
 import { resolve } from "node:path";
 import { tune } from "../src/tune.js";
-import { loadSettings } from "../src/config.js";
+import { loadSettings, Provider } from "../src/config.js";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -23,13 +23,14 @@ describe("tune command", () => {
 
     // Create a default rockyctl.yaml in the temp dir
     const defaultSettings = {
-      ollama: {
+      providers: [{
+        providerName: "ollama",
         baseUrl: "http://127.0.0.1:11434",
         readyTimeoutMs: 120000,
         requestTimeoutMs: 600000,
         keepAlive: "30m",
         numCtx: 32768
-      },
+      }],
       models: {
         generator: "gemma4:26b-a4b-it-qat",
         judge: "gemma4:12b-it-qat"
@@ -84,12 +85,12 @@ describe("tune command", () => {
     writeFileSync(logFile, JSON.stringify(errorEvent) + "\n");
 
     const settingsBefore = loadSettings(cwd);
-    const oldTimeout = settingsBefore.ollama.requestTimeoutMs;
+    const oldTimeout = (settingsBefore.providers.find(p => p.providerName === "ollama") as Provider).requestTimeoutMs;
 
     await tune(cwd);
 
     const settingsAfter = loadSettings(cwd);
-    const newTimeout = settingsAfter.ollama.requestTimeoutMs;
+    const newTimeout = (settingsAfter.providers.find(p => p.providerName === "ollama") as Provider).requestTimeoutMs;
 
     assert.strictEqual(newTimeout, Math.ceil(oldTimeout * 1.5));
   });
@@ -129,12 +130,12 @@ describe("tune command", () => {
     writeFileSync(logFile, JSON.stringify(event) + "\n");
 
     const settingsBefore = loadSettings(cwd);
-    const oldNumCtx = settingsBefore.ollama.numCtx;
+    const oldNumCtx = (settingsBefore.providers.find(p => p.providerName === "ollama") as Provider).numCtx;
 
     await tune(cwd);
 
     const settingsAfter = loadSettings(cwd);
-    const newNumCtx = settingsAfter.ollama.numCtx;
+    const newNumCtx = (settingsAfter.providers.find(p => p.providerName === "ollama") as Provider).numCtx;
 
     assert.ok(newNumCtx > oldNumCtx, `numCtx should have increased, got ${oldNumCtx} -> ${newNumCtx}`);
   });
@@ -153,12 +154,12 @@ describe("tune command", () => {
     writeFileSync(logFile, JSON.stringify(event) + "\n");
 
     const settingsBefore = loadSettings(cwd);
-    const oldNumCtx = settingsBefore.ollama.numCtx;
+    const oldNumCtx = (settingsBefore.providers.find(p => p.providerName === "ollama") as Provider).numCtx;
 
     await tune(cwd);
 
     const settingsAfter = loadSettings(cwd);
-    const newNumCtx = settingsAfter.ollama.numCtx;
+    const newNumCtx = (settingsAfter.providers.find(p => p.providerName === "ollama") as Provider).numCtx;
 
     assert.ok(newNumCtx < oldNumCtx, `numCtx should have decreased, got ${oldNumCtx} -> ${newNumCtx}`);
   });
@@ -178,12 +179,12 @@ describe("tune command", () => {
     }
 
     const settingsBefore = loadSettings(cwd);
-    const oldTimeout = settingsBefore.ollama.requestTimeoutMs;
+    const oldTimeout = (settingsBefore.providers.find(p => p.providerName === "ollama") as Provider).requestTimeoutMs;
 
     await tune(cwd);
 
     const settingsAfter = loadSettings(cwd);
-    const newTimeout = settingsAfter.ollama.requestTimeoutMs;
+    const newTimeout = (settingsAfter.providers.find(p => p.providerName === "ollama") as Provider).requestTimeoutMs;
 
     // If it only took the last 3, it should still update.
     // If it took all 4, it would still update but maybe differently if we had cumulative logic.

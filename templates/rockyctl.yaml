@@ -1,27 +1,28 @@
 # rockyctl settings
 # All values shown are the defaults; delete any key to fall back to it.
 
-ollama:
-  baseUrl: http://127.0.0.1:11434
-  # Total budget (ms) for the readiness check: server reachable, both models present,
-  # and both models warmed into memory. Large models can take a while to load.
-  readyTimeoutMs: 120000
-  # Per-request timeout (ms) for a single generation call.
-  requestTimeoutMs: 600000
-  # Ask Ollama to keep models resident between iterations so we don't reload every loop.
-  keepAlive: 30m
-  # Context window requested for each call. The generator needs room for tool schemas
-  # plus whatever files it reads; raise this if you see truncation, lower it if VRAM is tight.
-  numCtx: 32768
-  # Retries for a chat() call after a transient network failure (connection reset/refused,
-  # 5xx). A deliberate requestTimeoutMs abort or an HTTP 4xx is never retried.
-  maxRetries: 2
-  # Base delay (ms) before the first retry; doubles each subsequent attempt.
-  retryBackoffMs: 1000
-  # Reasoning effort for models that support extended thinking. Sent as the top-level
-  # `think` field on /api/chat and /api/generate requests. Accepts "low", "medium",
-  # "high", true or false. When this key is omitted, the `think` field is not sent at all.
-  # thinkEffort: low
+providers:
+  - providerName: ollama
+    baseUrl: http://127.0.0.1:11434
+    # Total budget (ms) for the readiness check: server reachable, both models present,
+    # and both models warmed into memory. Large models can take a while to load.
+    readyTimeoutMs: 120000
+    # Per-request timeout (ms) for a single generation call.
+    requestTimeoutMs: 600000
+    # Ask Ollama to keep models resident between iterations so we don't reload every loop.
+    keepAlive: 30m
+    # Context window requested for each call. The generator needs room for tool schemas
+    # plus whatever files it reads; raise this if you see truncation, lower it if VRAM is tight.
+    numCtx: 32768
+    # Retries for a chat() call after a transient network failure (connection reset/refused,
+    # 5xx). A deliberate requestTimeoutMs abort or an HTTP 4xx is never retried.
+    maxRetries: 2
+    # Base delay (ms) before the first retry; doubles each subsequent attempt.
+    retryBackoffMs: 1000
+    # Reasoning effort for models that support extended thinking. Sent as the top-level
+    # `think` field on /api/chat and /api/generate requests. Accepts "low", "medium",
+    # "high", true or false. When this key is omitted, the `think` field is not sent at all.
+    # thinkEffort: low
 
 models:
   # Writes the code. Must support tool calling in Ollama (`rockyctl doctor` verifies this).

@@ -1,17 +1,19 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { execSync } from "node:child_process";
-import { existsSync, rmSync, mkdirSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, writeFileSync } from "node:fs";
+import { rm } from "node:fs/promises";
 import { resolve, join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { runLoop } from "../src/loop.js";
 import { loadSettings } from "../src/config.js";
-import { createServer } from "node:http";
+import { createServer, Server } from "node:http";
+import { AddressInfo } from "node:net";
 
 test("cleanupGitLock removes index.lock if judge fails", async () => {
   const tempDirBase = resolve(process.cwd(), "temp_test_git_lock");
   const tempDir = tempDirBase + "_" + Date.now();
-  if (existsSync(tempDir)) rmSync(tempDir, { recursive: true, force: true });
+  if (existsSync(tempDir)) await rm(tempDir, { recursive: true, force: true, maxRetries: 20, retryDelay: 300 });
   mkdirSync(tempDir);
 
   // 1. Setup git repo
@@ -26,7 +28,7 @@ test("cleanupGitLock removes index.lock if judge fails", async () => {
   assert.ok(existsSync(lockFile), "Lock file should exist initially");
 
   // 2. Start a failing server on a random port
-  const server = await new Promise<typeof createServer>((resolve, reject) => {
+  const server = await new Promise<Server>((resolve, reject) => {
     const s = createServer((req, res) => {
       if (req.url === "/api/chat") {
         res.writeHead(500);
@@ -42,10 +44,11 @@ test("cleanupGitLock removes index.lock if judge fails", async () => {
     s.listen(0, "127.0.0.1", () => resolve(s));
     s.on('error', reject);
   });
-  const port = server.address()?.port as number;
-  if (port === undefined) throw new Error("Could not get server port");
+  const port = (server.address() as AddressInfo | null)?.port;
 
   try {
+    if (port === undefined) throw new Error("Could not get server port");
+
     // 3. Prepare configuration
     const configDir = resolve(tempDir, ".rockyctl/config");
     const tasksDir = resolve(tempDir, ".rockyctl");
@@ -53,10 +56,11 @@ test("cleanupGitLock removes index.lock if judge fails", async () => {
     mkdirSync(tasksDir, { recursive: true });
 
     const yamlContent = `
-ollama:
-  baseUrl: "http://127.0.0.1:${port}"
-  readyTimeoutMs: 2000
-  requestTimeoutMs: 2000
+providers:
+  - providerName: "ollama"
+    baseUrl: "http://127.0.0.1:${port}"
+    readyTimeoutMs: 2000
+    requestTimeoutMs: 2000
 models:
   generator: "gen:latest"
   judge: "judge:latest"
@@ -86,6 +90,6 @@ files:
 
   } finally {
     server.close();
-    if (existsSync(tempDir)) rmSync(tempDir, { recursive: true, force: true });
+    if (existsSync(tempDir)) await rm(tempDir, { recursive: true, force: true, maxRetries: 20, retryDelay: 300 });
   }
 });

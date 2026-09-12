@@ -32,6 +32,13 @@ describe("tsc check error handling", () => {
 
     execSync(`git add README.md package.json`, { cwd: testDir });
     execSync(`git commit -m "Initial commit"`, { cwd: testDir });
+    const gitIgnoreContent = `
+.rockyctl/
+`;
+    fs.writeFileSync(path.join(testDir, ".gitignore"), gitIgnoreContent);
+
+    execSync(`git add .gitignore`, { cwd: testDir });
+    execSync(`git commit -m "gitIgnore commit"`, { cwd: testDir });
 
     const fakeOllamaPath = resolve(rootDir, "tests/fake-ollama.mjs");
     fakeOllama = spawn("node", [fakeOllamaPath], {
@@ -56,10 +63,11 @@ describe("tsc check error handling", () => {
     fs.mkdirSync(configDir, { recursive: true });
 
     const yamlContent = `
-ollama:
-  baseUrl: http://localhost:11498
-  maxRetries: 2
-  retryBackoffMs: 20
+providers:
+  - providerName: ollama
+    baseUrl: http://localhost:11498
+    maxRetries: 2
+    retryBackoffMs: 20
 models:
   generator: gen:latest
   judge: judge:latest

@@ -1,7 +1,7 @@
 import { readFileSync, existsSync } from "node:fs";
 import { resolve } from "node:path";
 import { execSync } from "node:child_process";
-import type { Settings } from "./config.js";
+import type { Provider, Settings } from "./config.js";
 import { OllamaClient, type ChatMessage, type RetryFn } from "./ollama.js";
 import { TaskStore, type Task } from "./tasks.js";
 import { GENERATOR_TOOLS, JUDGE_TOOLS, executeTool } from "./tools/index.js";
@@ -26,7 +26,7 @@ export async function runLoop(settings: Settings, cwd: string, opts: RunOptions 
   let store: TaskStore;
 
   try {
-    const client = new OllamaClient(settings.ollama);
+    const client = new OllamaClient(settings.providers.find(p => p.providerName === "ollama") as Provider);
     store = new TaskStore(resolve(cwd, settings.files.tasks));
     const promptPath = resolve(cwd, settings.files.prompt);
     const projectPrompt = existsSync(promptPath) ? readFileSync(promptPath, "utf8") : "";

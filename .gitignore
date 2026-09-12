@@ -2,6 +2,7 @@ node_modules/
 dist/
 backup/
 .rockyctl/
+.scratch/
 
 .qodo
 .continue

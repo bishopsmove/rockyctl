@@ -106,6 +106,47 @@ program
   });
 
 program
+  .command("config")
+  .description("View or update settings in .rockyctl/config/rockyctl.yaml")
+  .option("--field <path>", "colon-separated path into the settings (e.g. providers:0:requestTimeoutMs)")
+  .option("--set <value>", "write a new value at --field")
+  .action((opts: { field?: string; set?: string }) => {
+    const cwd = process.cwd();
+    const settings = loadSettings(cwd);
+
+    if (opts.set !== undefined) {
+      if (!opts.field) {
+        ui.fail("The --field switch is required when using --set");
+        process.exitCode = 1;
+        return;
+      }
+      let value: unknown = opts.set;
+      try {
+        value = JSON.parse(opts.set);
+      } catch {
+        // not JSON (a plain string like a URL) - keep the raw string
+      }
+      setNestedValue(settings, opts.field, value);
+      writeFileSync(resolve(cwd, SETTINGS_FILE), stringifySettings(settings));
+      ui.ok(`Updated ${opts.field} to ${opts.set}`);
+      return;
+    }
+
+    if (opts.field) {
+      const value = getNestedValue(settings, opts.field);
+      if (value === undefined) {
+        ui.fail(`Setting not found: ${opts.field}`);
+        process.exitCode = 1;
+        return;
+      }
+      console.log(typeof value === "object" ? JSON.stringify(value) : String(value));
+      return;
+    }
+
+    console.log(stringifySettings(settings));
+  });
+
+program
   .command("status")
   .description("Show task states")
   .action(() => {

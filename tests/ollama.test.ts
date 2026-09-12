@@ -3,11 +3,11 @@ import assert from "node:assert/strict";
 import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
 import { OllamaClient, describeError } from "../src/ollama.js";
-import { SettingsSchema } from "../src/config.js";
+import { Provider, SettingsSchema } from "../src/config.js";
 
 function settings(baseUrl: string, over: Partial<{ requestTimeoutMs: number; maxRetries: number; retryBackoffMs: number; thinkEffort?: "low" | "medium" | "high" | boolean }> = {}) {
   // Tests that aren't exercising retry behaviour don't want it: they just slow them down.
-  return SettingsSchema.parse({ ollama: { baseUrl, maxRetays: 0, ...over } }).ollama;
+  return SettingsSchema.parse({ providers: [{ providerName: "ollama", baseUrl, ...over }] }).providers.find(p => p.providerName === "ollama");
 }
 
 test("chat accumulates streamed content and tool_calls", async () => {
@@ -21,7 +21,7 @@ test("chat accumulates streamed content and tool_calls", async () => {
   await new Promise<void>((r) => server.listen(0, r));
   const port = (server.address() as AddressInfo).port;
   try {
-    const client = new OllamaClient(settings(`http://127.0.0.1:${port}`));
+    const client = new OllamaClient(settings(`http://127.0.0.1:${port}`) as Provider);
     const seen: number[] = [];
     const res = await client.chat("m", [{ role: "user", content: "hi" }], { onToken: (i) => seen.push(i.tokens) });
     assert.equal(res.message.content, "Hello");
@@ -42,7 +42,7 @@ test("chat surfaces a mid-stream Ollama error", async () => {
   await new Promise<void>((r) => server.listen(0, r));
   const port = (server.address() as AddressInfo).port;
   try {
-    const client = new OllamaClient(settings(`http://127.0.0.1:${port}`));
+    const client = new OllamaClient(settings(`http://127.0.0.1:${port}`) as Provider);
     await assert.rejects(client.chat("m", [{ role: "user", content: "hi" }]), /runner process has terminated/);
   } finally {
     server.close();
@@ -58,7 +58,7 @@ test("chat reports a dropped connection instead of a bare 'fetch failed'", async
   await new Promise<void>((r) => server.listen(0, r));
   const port = (server.address() as AddressInfo).port;
   try {
-    const client = new OllamaClient(settings(`http://127.0.0.1:${port}`));
+    const client = new OllamaClient(settings(`http://127.0.0.1:${port}`) as Provider);
     await assert.rejects(client.chat("m", [{ role: "user", content: "hi" }]), (e: Error) => {
       assert.match(e.message, /Streaming from m failed|ended without a final chunk/);
       assert.doesNotMatch(e.message, /^fetch failed$/);
@@ -76,7 +76,7 @@ test("chat honours requestTimeoutMs", async () => {
   await new Promise<void>((r) => server.listen(0, r));
   const port = (server.address() as AddressInfo).port;
   try {
-    const client = new OllamaClient(settings(`http://127.0.0.1:${port}`, { requestTimeoutMs: 200 }));
+    const client = new OllamaClient(settings(`http://127.0.0.1:${port}`, { requestTimeoutMs: 200 }) as Provider);
     await assert.rejects(client.chat("m", [{ role: "user", content: "hi" }]), /exceeded requestTimeoutMs/);
   } finally {
     server.closeAllConnections();
@@ -90,7 +90,7 @@ test("connection refused is described with its code", async () => {
   await new Promise<void>((r) => probe.listen(0, r));
   const port = (probe.address() as AddressInfo).port;
   await new Promise<void>((r) => probe.close(() => r()));
-  const client = new OllamaClient(settings(`http://127.0.0.1:${port}`));
+  const client = new OllamaClient(settings(`http://127.0.0.1:${port}`) as Provider);
   await assert.rejects(client.listModels(1000), /ECONNREFUSED/);
 });
 
@@ -109,7 +109,7 @@ test("chat retries after a transient connection reset and eventually succeeds", 
   await new Promise<void>((r) => server.listen(0, r));
   const port = (server.address() as AddressInfo).port;
   try {
-    const client = new OllamaClient(settings(`http://127.0.0.1:${port}`, { maxRetries: 2, retryBackoffMs: 10 }));
+    const client = new OllamaClient(settings(`http://127.0.0.1:${port}`, { maxRetries: 2, retryBackoffMs: 10 }) as Provider);
     const retries: { attempt: number; maxAttempts: number; error: string }[] = [];
     const res = await client.chat("m", [{ role: "user", content: "hi" }], {
       onRetry: (info) => retries.push({ attempt: info.attempt, maxAttempts: info.maxAttempts, error: info.error }),
@@ -135,7 +135,7 @@ test("chat does not retry a deliberate requestTimeoutMs abort", async () => {
   await new Promise<void>((r) => server.listen(0, r));
   const port = (server.address() as AddressInfo).port;
   try {
-    const client = new OllamaClient(settings(`http://127.0.0.1:${port}`, { requestTimeoutMs: 100, maxRetries: 3, retryBackoffMs: 10 }));
+    const client = new OllamaClient(settings(`http://127.0.0.1:${port}`, { requestTimeoutMs: 100, maxRetries: 3, retryBackoffMs: 10 }) as Provider);
     await assert.rejects(
       client.chat("m", [{ role: "user", content: "hi" }], { onRetry: () => { /* avoid error if test fails */ } }),
       /exceeded requestTimeoutMs/,
@@ -157,7 +157,7 @@ test("chat does not retry an HTTP 4xx", async () => {
   await new Promise<void>((r) => server.listen(0, r));
   const port = (server.address() as AddressInfo).port;
   try {
-    const client = new OllamaClient(settings(`http://127.0.0.1:${port}`, { maxRetries: 3, retryBackoffMs: 10 }));
+    const client = new OllamaClient(settings(`http://127.0.0.1:${port}`, { maxRetries: 3, retryBackoffMs: 10 }) as Provider);
     await assert.rejects(client.chat("m", [{ role: "user", content: "hi" }]), /does not support tools/);
     assert.equal(requestCount, 1);
   } finally {
@@ -185,7 +185,7 @@ test("chat sends the top-level think field when thinkEffort is set", async () =>
   await new Promise<void>((r) => server.listen(0, r));
   const port = (server.address() as AddressInfo).port;
   try {
-    const client = new OllamaClient(settings(`http://127.0.0.1:${port}`, { thinkEffort: "high" as any }));
+    const client = new OllamaClient(settings(`http://127.0.0.1:${port}`, { thinkEffort: "high" as any }) as Provider);
     await client.chat("m", [{ role: "user", content: "hi" }]);
     assert.ok(receivedBody, "server should have received the chat request");
     assert.equal(receivedBody.think, "high");
@@ -208,7 +208,7 @@ test("chat omits the think field when thinkEffort is absent", async () => {
   await new Promise<void>((r) => server.listen(0, r));
   const port = (server.address() as AddressInfo).port;
   try {
-    const client = new OllamaClient(settings(`http://127.0.0.1:${port}`));
+    const client = new OllamaClient(settings(`http://127.0.0.1:${port}`) as Provider);
     await client.chat("m", [{ role: "user", content: "hi" }]);
     assert.ok(receivedBody, "server should have received the chat request");
     assert.ok(!("think" in receivedBody), "think field must be omitted when thinkEffort is not set");
@@ -233,7 +233,7 @@ test("generate sends the top-level think field for string and boolean thinkEffor
   const port = (server.address() as AddressInfo).port;
   try {
     for (const value of ["low" as const, true, false]) {
-      const client = new OllamaClient(settings(`http://127.0.0.1:${port}`, { thinkEffort: value as any }));
+      const client = new OllamaClient(settings(`http://127.0.0.1:${port}`, { thinkEffort: value as any }) as Provider);
       await client.generate("m", "hello");
       assert.ok(seen.includes(JSON.stringify(value)));
     }
@@ -256,7 +256,7 @@ test("generate omits the think field when thinkEffort is absent", async () => {
   await new Promise<void>((r) => server.listen(0, r));
   const port = (server.address() as AddressInfo).port;
   try {
-    const client = new OllamaClient(settings(`http://127.0.0.1:${port}`));
+    const client = new OllamaClient(settings(`http://127.0.0.1:${port}`) as Provider);
     await client.generate("m", "hello");
     assert.ok(receivedBody, "server should have received the generate request");
     assert.ok(!("think" in receivedBody), "think field must be omitted when thinkEffort is not set");
@@ -296,7 +296,7 @@ test("waitUntilReady calls /api/ps and only warms up missing models", async () =
   await new Promise<void>((r) => server.listen(0, r));
   const port = (server.address() as AddressInfo).port;
   try {
-    const client = new OllamaClient(settings(`http://127.0.0.1:${port}`));
+    const client = new OllamaClient(settings(`http://127.0.0.1:${port}`) as Provider);
     await client.waitUntilReady(["model1", "model2"]);
 
     assert.strictEqual(psCalled, true, "should have called /api/ps");

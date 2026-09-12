@@ -52,10 +52,11 @@ describe("chat() retry is logged, not silent", () => {
     fs.mkdirSync(configDir, { recursive: true });
 
     const yamlContent = `
-ollama:
-  baseUrl: http://localhost:11498
-  maxRetries: 2
-  retryBackoffMs: 20
+providers:
+  - providerName: ollama
+    baseUrl: http://localhost:11498
+    maxRetries: 2
+    retryBackoffMs: 20
 models:
   generator: gen:latest
   judge: judge:latest

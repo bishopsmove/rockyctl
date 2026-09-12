@@ -19,12 +19,12 @@ const runCommand = (args: string[]) => {
 test("rockyctl config outputs all settings", () => {
   const result = runCommand(["config"]);
   assert.strictEqual(result.status, 0);
-  assert.ok(result.stdout.includes("ollama:"), "Should include ollama section");
+  assert.ok(result.stdout.includes("providers:"), "Should include providers section");
   assert.ok(result.stdout.includes("baseUrl:"), "Should include baseUrl");
 });
 
-test("rockyctl config --field ollama:readyTimeoutMs outputs specific value", () => {
-  const result = runCommand(["config", "--field", "ollama:readyTimeoutMs"]);
+test("rockyctl config --field providers:0:readyTimeoutMs outputs specific value", () => {
+  const result = runCommand(["config", "--field", "providers:0:readyTimeoutMs"]);
   assert.strictEqual(result.status, 0);
   // Default value in src/config.ts for readyTimeoutMs is 120000 (number)
   assert.ok(result.stdout.trim().match(/^[0-9]+$/), `Expected numeric value, got: ${result.stdout.trim()}`);

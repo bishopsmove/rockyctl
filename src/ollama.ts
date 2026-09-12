@@ -1,5 +1,5 @@
 import { Agent, fetch as undiciFetch, type Response as UndiciResponse } from "undici";
-import type { Settings } from "./config.js";
+import type { Settings, Provider } from "./config.js";
 
 export interface ChatMessage {
   role: "system" | "user" | "assistant" | "tool";
@@ -74,11 +74,11 @@ export class OllamaError extends Error {
 }
 
 export class OllamaClient {
-  private readonly baseUrl: string;
+  private readonly provider: Provider;
   private readonly agent: Agent;
 
-  constructor(private readonly settings: Settings["ollama"]) {
-    this.baseUrl = settings.baseUrl.replace(/\/+$/, "");
+  constructor(provider: Provider) {
+    this.provider = provider;
     // undici's defaults (headersTimeout/bodyTimeout = 300s) are what produce a bare
     // "fetch failed" on a slow local model: with stream:false Ollama sends nothing until
     // generation finishes. We manage the deadline ourselves via AbortController instead.
@@ -90,9 +90,13 @@ export class OllamaClient {
     });
   }
 
+  private get baseUrl(): string {
+    return this.provider.baseUrl.replace(/\/+$/, "");
+  }
+
   /** The `think` field to include on generation requests, or undefined to omit it. */
   private get think(): boolean | "low" | "medium" | "high" | undefined {
-    return this.settings.thinkEffort;
+    return this.provider.thinkEffort;
   }
 
   /** Cheap reachability probe. Resolves to the model list, rejects if the server is down. */
@@ -123,8 +127,8 @@ export class OllamaClient {
         body: JSON.stringify({
           model,
           messages: [],
-          keep_alive: this.settings.keepAlive,
-          options: { num_ctx: this.settings.numCtx },
+          keep_alive: this.provider.keepAlive,
+          options: { num_ctx: this.provider.numCtx },
         }),
       },
       timeoutMs,
@@ -148,13 +152,13 @@ export class OllamaClient {
       onRetry?: RetryFn;
     } = {},
   ): Promise<ChatResponse> {
-    const maxAttempts = 1 + this.settings.maxRetries;
+    const maxAttempts = 1 + this.provider.maxRetries;
     for (let attempt = 1; ; attempt++) {
       try {
         return await this.chatOnce(model, messages, opts);
       } catch (err) {
         if (attempt >= maxAttempts || !isRetryableChatError(err)) throw err;
-        const delayMs = this.settings.retryBackoffMs * 2 ** (attempt - 1);
+        const delayMs = this.provider.retryBackoffMs * 2 ** (attempt - 1);
         opts.onRetry?.({ attempt, maxAttempts, delayMs, error: (err as Error).message });
         await sleep(delayMs);
       }
@@ -176,9 +180,9 @@ export class OllamaClient {
       model,
       messages,
       stream: true,
-      keep_alive: this.settings.keepAlive,
+      keep_alive: this.provider.keepAlive,
       options: {
-        num_ctx: this.settings.numCtx,
+        num_ctx: this.provider.numCtx,
         ...(opts.temperature !== undefined ? { temperature: opts.temperature } : {}),
       },
     };
@@ -190,12 +194,12 @@ export class OllamaClient {
 
     const started = Date.now();
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), this.settings.requestTimeoutMs);
+    const timer = setTimeout(() => controller.abort(), this.provider.requestTimeoutMs);
     try {
       const res = await this.fetch(
         "/api/chat",
         { method: "POST", body: JSON.stringify(body) },
-        this.settings.requestTimeoutMs,
+        this.provider.requestTimeoutMs,
         controller,
       );
       if (!res.body) throw new OllamaError("POST /api/chat returned no body");
@@ -235,7 +239,7 @@ export class OllamaClient {
       return { ...(final as ChatResponse), message, done: true };
     } catch (err) {
       if (controller.signal.aborted) {
-        throw new OllamaError(`Generation with ${model} exceeded requestTimeoutMs (${this.settings.requestTimeoutMs}ms)`);
+        throw new OllamaError(`Generation with ${model} exceeded requestTimeoutMs (${this.provider.requestTimeoutMs}ms)`);
       }
       if (err instanceof OllamaError) throw err;
       throw new OllamaError(`Streaming from ${model} failed: ${describeError(err)}`);
@@ -263,9 +267,9 @@ export class OllamaClient {
       model,
       prompt,
       stream: false,
-      keep_alive: this.settings.keepAlive,
+      keep_alive: this.provider.keepAlive,
       options: {
-        num_ctx: this.settings.numCtx,
+        num_ctx: this.provider.numCtx,
         ...(opts.temperature !== undefined ? { temperature: opts.temperature } : {}),
       },
     };
@@ -276,7 +280,7 @@ export class OllamaClient {
     const res = await this.fetch(
       "/api/generate",
       { method: "POST", body: JSON.stringify(body) },
-      this.settings.requestTimeoutMs,
+      this.provider.requestTimeoutMs,
     );
     const result = (await res.json()) as GenerateResponse;
     if (result.error) throw new OllamaError(`Ollama error during generation: ${result.error}`);
@@ -306,7 +310,7 @@ export class OllamaClient {
             messages: [{ role: "user", content: "Reply with the single word: ok" }],
             tools: [probeTool],
             stream: false,
-            keep_alive: this.settings.keepAlive,
+            keep_alive: this.provider.keepAlive,
             options: { num_predict: 8 },
           }),
         },
@@ -330,10 +334,10 @@ export class OllamaClient {
    * Throws with a specific message on whichever stage fails or times out.
    */
   async waitUntilReady(models: string[], progress: ProgressFn = () => {}): Promise<void> {
-    const deadline = Date.now() + this.settings.readyTimeoutMs;
+    const deadline = Date.now() + this.provider.readyTimeoutMs;
     const remaining = () => deadline - Date.now();
 
-    progress(`Contacting Ollama at ${this.baseUrl} ...`);
+    progress(`Contacting Ollama at ${this.provider.baseUrl} ...`);
     let available: ModelInfo[] | undefined;
     let lastErr: unknown;
     while (remaining() > 0) {
@@ -347,7 +351,7 @@ export class OllamaClient {
     }
     if (!available) {
       throw new OllamaError(
-        `Ollama at ${this.baseUrl} did not respond within ${this.settings.readyTimeoutMs}ms` +
+        `Ollama at ${this.provider.baseUrl} did not respond within ${this.provider.readyTimeoutMs}ms` +
           ` (${lastErr instanceof Error ? lastErr.message : String(lastErr)})`,
       );
     }
@@ -357,7 +361,7 @@ export class OllamaClient {
     const missing = [...new Set(models)].filter((m) => !names.has(m) && !names.has(`${m}:latest`));
     if (missing.length) {
       throw new OllamaError(
-        `Model(s) not installed on ${this.baseUrl}: ${missing.join(", ")}\n` +
+        `Model(s) not installed on ${this.provider.baseUrl}: ${missing.join(", ")}\n` +
           `Run: ${missing.map((m) => `ollama pull ${m}`).join(" && ")}`,
       );
     }
@@ -372,7 +376,7 @@ export class OllamaClient {
 
     for (const model of [...new Set(models)]) {
       if (remaining() <= 0) {
-        throw new OllamaError(`Timed out before warming ${model} (readyTimeoutMs=${this.settings.readyTimeoutMs})`);
+        throw new OllamaError(`Timed out before warming ${model} (readyTimeoutMs=${this.provider.readyTimeoutMs})`);
       }
 
       const isLoaded = loadedModels.some(
@@ -401,10 +405,10 @@ export class OllamaClient {
     controller = new AbortController(),
   ): Promise<UndiciResponse> {
     // For non-streaming calls the timer covers the whole request. For streaming calls the
-    // caller owns the controller and clears its own timer after the body is consumed.
+    // caller owns the controller.
     const ownTimer = setTimeout(() => controller.abort(), timeoutMs);
     try {
-      const res = await undiciFetch(this.baseUrl + path, {
+      const res = await undiciFetch(this.provider.baseUrl + path, {
         method: init.method,
         body: init.body,
         headers: { "content-type": "application/json" },

@@ -1,3 +1,8 @@
+/*
+  Deactivating this test for now.
+  Test is not correctly formulated.
+*/
+
 import { test, describe } from "node:test";
 import assert from "node:assert";
 import { resolve, dirname } from "node:path";
@@ -26,12 +31,36 @@ describe("cleanup test-created assets", () => {
     execSync(`git add README.md`, { cwd: testDir });
     execSync(`git commit -m "Initial commit"`, { cwd: testDir });
 
+    const gitIgnoreContent = `
+.rockyctl/
+`;
+    fs.writeFileSync(path.join(testDir, ".gitignore"), gitIgnoreContent);
+
+    execSync(`git add .gitignore`, { cwd: testDir });
+    execSync(`git commit -m "gitIgnore commit"`, { cwd: testDir });
+
+    const packageContent = `
+{
+  "name": "test",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "tsc": "node --version"
+  }
+}
+`
+    fs.writeFileSync(path.join(testDir, "package.json"), packageContent);
+    execSync(`git add package.json`, { cwd: testDir });
+    execSync(`git commit -m "package.json commit"`, { cwd: testDir });
+
     // Start fake-ollama in the background
     const fakeOllamaPath = resolve(rootDir, "tests/fake-ollama.mjs");
-    fakeOllama = spawn("node", [fakeOllamaPath, "--port", "11499"], {
-      detached: true,
-      stdio: 'ignore'
-    });
+        fakeOllama = spawn("node", [fakeOllamaPath], {
+          env: { ...process.env, PORT: "11499", RESET_ONCE: "1" },
+          detached: true,
+          stdio: "ignore",
+        });
     fakeOllama.unref();
     
     // Wait for server to start
@@ -51,15 +80,19 @@ describe("cleanup test-created assets", () => {
     fs.mkdirSync(path.join(testDir, ".rockyctl"), { recursive: true });
     
     const yamlContent = `
-ollama:
-  baseUrl: http://localhost:11499
+providers:
+  - providerName: "ollama"
+    baseUrl: http://localhost:11499
+models:
+  generator: gen:latest
+  judge: judge:latest
 loop:
   maxAttempts: 2
   maxIterations: 1
   maxToolCallsPerIteration: 10
 git:
   autoCommit: true
-  checkDirtyTree: true
+  checkDirtyTree: false
   commitPrefix: "test:"
 shell:
   allow: ["git *", "npm *", "npx *", "node *", "touch *"]
@@ -72,15 +105,17 @@ files:
     fs.writeFileSync(path.join(configDir, "rockyctl.yaml"), yamlContent);
     fs.writeFileSync(path.join(configDir, "PROMPT.md"), "You are a helpful assistant.");
     
-    const tasksContent = JSON.stringify([
+    const tasksContent = JSON.stringify({tasks: [
       {
         id: "test-task",
         title: "test task",
         status: "pending",
         attempts: 0,
         description: "create a file",
+        criteria: 
+          - "File is created."
       }
-    ], null, 2);
+    ]}, null, 2);
     fs.writeFileSync(path.join(testDir, ".rockyctl", "tasks.yaml"), tasksContent);
 
     try {

@@ -52,8 +52,12 @@ describe("task attempt incrementing", () => {
     fs.mkdirSync(path.join(testDir, ".rockyctl"), { recursive: true });
     
     const yamlContent = `
-ollama:
-  baseUrl: http://localhost:11499
+providers:
+  - providerName: "ollama"
+    baseUrl: http://localhost:11499
+models:
+  generator: gen:latest
+  judge: judge:latest
 loop:
   maxAttempts: 3
   maxIterations: 1
@@ -72,6 +76,14 @@ files:
 `;
     fs.writeFileSync(path.join(configDir, "rockyctl.yaml"), yamlContent);
     fs.writeFileSync(path.join(configDir, "PROMPT.md"), "You are a helpful assistant.");
+    const gitIgnoreContent = `
+.rockyctl/
+`;
+    fs.writeFileSync(path.join(testDir, ".gitignore"), gitIgnoreContent);
+
+    execSync(`git add .gitignore`, { cwd: testDir });
+    execSync(`git commit -m "gitIgnore commit"`, { cwd: testDir });
+
     
     const tasksContent = `tasks: ${JSON.stringify([
       {
@@ -104,8 +116,12 @@ files:
     fs.mkdirSync(path.join(testDir, ".rockyctl"), { recursive: true });
     
     const yamlContent = `
-ollama:
-  baseUrl: http://localhost:11499
+providers:
+  - providerName: "ollama"
+    baseUrl: http://localhost:11499
+models:
+  generator: gen:latest
+  judge: judge:latest
 loop:
   maxAttempts: 3
   maxIterations: 1
@@ -124,7 +140,14 @@ files:
 `;
     fs.writeFileSync(path.join(configDir, "rockyctl.yaml"), yamlContent);
     fs.writeFileSync(path.join(configDir, "PROMPT.md"), "You are a helpful assistant.");
-    
+    const gitIgnoreContent = `
+.rockyctl/
+`;
+    fs.writeFileSync(path.join(testDir, ".gitignore"), gitIgnoreContent);
+
+    execSync(`git add .gitignore`, { cwd: testDir });
+    execSync(`git commit -m "gitIgnore commit"`, { cwd: testDir });
+
     const tasksContent = `tasks: ${JSON.stringify([
       {
         id: "test-task",

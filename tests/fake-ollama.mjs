@@ -5,7 +5,7 @@
 //   SLOW_MS=400000 ... simulates a generation that takes longer than undici's 300s default.
 import { createServer } from "node:http";
 
-const port = Number(process.env.PORT ?? 11434);
+const port = Number(process.env.PORT ?? 11499);
 const slowMs = Number(process.env.SLOW_MS ?? 0);
 // RESET_ONCE=1 drops the connection mid-stream on the first generator turn, then behaves
 // normally after — used to exercise rockyctl's chat() retry path against a real socket reset.

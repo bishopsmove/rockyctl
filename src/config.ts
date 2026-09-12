@@ -1,4 +1,4 @@
-import { readFileSync, existsSync, mkdirSync, writeFileSync } from "node:fs";
+import { readFileSync, writeFileSync, existsSync } from "node:fs";
 import { resolve } from "node:path";
 import { parse, stringify } from "yaml";
 import { z } from "zod";
@@ -7,7 +7,8 @@ export const SETTINGS_FILE = ".rockyctl/config/rockyctl.yaml";
 
 export type ThinkEffort = "low" | "medium" | "high" | true | false;
 
-const OllamaSchema = z.object({
+const ProviderSchema = z.object({
+  providerName: z.string().default("ollama"),
   baseUrl: z.string().url().default("http://192.168.0.192:11434"),
   // Total budget for: server reachable + models present + models warmed into memory.
   readyTimeoutMs: z.number().int().positive().default(120_000),
@@ -27,6 +28,19 @@ const OllamaSchema = z.object({
   // absent, the `think` field is not sent at all.
   thinkEffort: z.union([z.enum(["low", "medium", "high"]), z.boolean()]).optional(),
 });
+
+export type Provider = z.infer<typeof ProviderSchema>;
+
+const ProvidersSchema = z.array(ProviderSchema).default([{
+  providerName: "ollama",
+  baseUrl: "http://192.168.0.192:11434",
+  readyTimeoutMs: 120_000,
+  requestTimeoutMs: 600_000,
+  keepAlive: "30m",
+  numCtx: 32_768,
+  maxRetries: 2,
+  retryBackoffMs: 1_000,
+}]);
 
 const ModelsSchema = z.object({
   generator: z.string().default("gemma4:26b-a4b-it-qat"),
@@ -65,7 +79,7 @@ const FilesSchema = z.object({
 });
 
 export const SettingsSchema = z.object({
-  ollama: OllamaSchema.default({}),
+  providers: ProvidersSchema,
   models: ModelsSchema.default({}),
   loop: LoopSchema.default({}),
   git: GitSchema.default({}),
@@ -113,11 +127,10 @@ export function setNestedValue(obj: any, path: string, value: any): void {
   const parts = path.split(':');
   let current = obj;
   for (let i = 0; i < parts.length - 1; i++) {
-    const part = parts[i];
-    if (current[part] === undefined || current[part] === null || typeof current !== 'object') {
+    if (current === undefined || current === null || typeof current !== 'object') {
       return;
     }
-    current = current[part];
+    current = current[parts[i]];
   }
   const lastPart = parts[parts.length - 1];
   current[lastPart] = value;

@@ -1,6 +1,6 @@
 import { existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { resolve, join } from "node:path";
-import { loadSettings, setNestedValue, stringifySettings, SETTINGS_FILE } from "./config.js";
+import { loadSettings, Provider, setNestedValue, stringifySettings, SETTINGS_FILE } from "./config.js";
 import { ui } from "./log.js";
 
 export async function tune(cwd: string) {
@@ -94,17 +94,23 @@ export async function tune(cwd: string) {
           }
         }
       } else {
-        const current = settings.ollama.requestTimeoutMs;
-        const next = Math.ceil(current * 1.5);
-        if (next <= 1_200_000 && current !== next) {
-          if (!changes.find(c => c.path === "ollama:requestTimeoutMs")) {
-            changes.push({
-              path: "ollama:requestTimeoutMs",
-              old: current,
-              new: next,
-              reason: "Previous task runs encountered Ollama request timeouts."
-            });
-            setNestedValue(settings, "ollama:requestTimeoutMs", next);
+        // Find the provider that has the timeout
+        const ollamaIdx = settings.providers.findIndex(p => p.providerName === "ollama");
+        const ollamaProvider = settings.providers[ollamaIdx] as Provider | undefined;
+        if (ollamaProvider) {
+          const current = ollamaProvider.requestTimeoutMs;
+          const next = Math.ceil(current * 1.5);
+          if (next <= 1_200_000 && current !== next) {
+            const path = `providers:${ollamaIdx}:requestTimeoutMs`;
+            if (!changes.find(c => c.path === path)) {
+              changes.push({
+                path,
+                old: current,
+                new: next,
+                reason: "Previous task runs encountered Ollama request timeouts."
+              });
+              setNestedValue(settings, path, next);
+            }
           }
         }
       }
@@ -112,54 +118,66 @@ export async function tune(cwd: string) {
 
     // Context overflow errors
     if (msg.includes("context length exceeded") || msg.includes("too many tokens") || msg.includes("context window")) {
-      const current = settings.ollama.numCtx;
-      const next = Math.ceil(current * 1.5);
-      if (next <= 32768 * 4 && current !== next) {
-        if (!changes.find(c => c.path === "ollama:numCtx")) {
-          changes.push({
-            path: "ollama:numCtx",
-            old: current,
-            new: next,
-            reason: "Previous task runs encountered context overflow errors."
-          });
-          setNestedValue(settings, "ollama:numCtx", next);
+      const ollamaIdx = settings.providers.findIndex(p => p.providerName === "ollama");
+      const ollamaProvider = settings.providers[ollamaIdx] as Provider | undefined;
+      if (ollamaProvider) {
+        const current = ollamaProvider.numCtx;
+        const next = Math.ceil(current * 1.5);
+        if (next <= 32768 * 4 && current !== next) {
+          const path = `providers:${ollamaIdx}:numCtx`;
+          if (!changes.find(c => c.path === path)) {
+            changes.push({
+              path,
+              old: current,
+              new: next,
+              reason: "Previous task runs encountered context overflow errors."
+            });
+            setNestedValue(settings, path, next);
+          }
         }
       }
     }
   }
 
   // 2. Performance based tuning (numCtx)
-  // If avgPromptTokens is approaching current numCtx, increase numCtx
-  if (avgPromptTokens > settings.ollama.numCtx * 0.8 && avgPromptTokens > 0) {
-    const current = settings.ollama.numCtx;
+  const ollamaBaseIdx = settings.providers.findIndex(p => p.providerName === "ollama");
+  const ollamaBaseProvider = settings.providers[ollamaBaseIdx] as Provider | undefined;
+  if (ollamaBaseProvider && avgPromptTokens > ollamaBaseProvider.numCtx * 0.8 && avgPromptTokens > 0) {
+    const current = ollamaBaseProvider.numCtx;
     const next = Math.min(32768 * 4, Math.ceil(avgPromptTokens * 1.2));
     if (next > current && next <= 32768 * 4) {
-      if (!changes.find(c => c.path === "ollama:numCtx")) {
+      const path = `providers:${ollamaBaseIdx}:numCtx`;
+      if (!changes.find(c => c.path === path)) {
         changes.push({
-          path: "ollama:numCtx",
+          path,
           old: current,
           new: next,
           reason: "Prompt tokens are approaching the current context limit."
         });
-        setNestedValue(settings, "ollama:numCtx", next);
+        setNestedValue(settings, path, next);
       }
     }
   }
 
-  // If eval tokens per second is very low and VRAM usage is being reported, 
+  // If eval tokens per second is very low and VRAM usage is being reported,
   // it might indicate memory pressure/swapping, so try reducing numCtx.
   if (avgEvalTokensPerSec > 0 && avgEvalTokensPerSec < 5 && avgVramUsage > 0) {
-    const current = settings.ollama.numCtx;
-    const next = Math.max(1024, Math.floor(current / 2));
-    if (next < current) {
-      if (!changes.find(c => c.path === "ollama:numCtx")) {
-        changes.push({
-          path: "ollama:numCtx",
-          old: current,
-          new: next,
-          reason: "Low tokens per second with VRAM usage suggests reducing context size might help."
-        });
-        setNestedValue(settings, "ollama:numCtx", next);
+    const ollamaIdx = settings.providers.findIndex(p => p.providerName === "ollama");
+    const ollamaProvider = settings.providers[ollamaIdx] as Provider | undefined;
+    if (ollamaProvider) {
+      const current = ollamaProvider.numCtx;
+      const next = Math.max(1024, Math.floor(current / 2));
+      if (next < current) {
+        const path = `providers:${ollamaIdx}:numCtx`;
+        if (!changes.find(c => c.path === path)) {
+          changes.push({
+            path,
+            old: current,
+            new: next,
+            reason: "Low tokens per second with VRAM usage suggests reducing context size might help."
+          });
+          setNestedValue(settings, path, next);
+        }
       }
     }
   }

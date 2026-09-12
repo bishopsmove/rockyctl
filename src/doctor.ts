@@ -31,11 +31,16 @@ export async function doctor(settings: Settings, cwd: string): Promise<boolean> 
     fail("Not a git repository, but git.autoCommit / git.checkDirtyTree are enabled.");
   }
 
-  const client = new OllamaClient(settings.ollama);
+  const ollamaProvider = settings.providers.find(p => p.providerName === "ollama");
+  if (!ollamaProvider) {
+    fail("Ollama provider not found in settings.providers");
+    return false;
+  }
+  const client = new OllamaClient(ollamaProvider);
   const started = Date.now();
   try {
     await client.waitUntilReady([settings.models.generator, settings.models.judge], ui.step);
-    ui.ok(`Ollama ready in ${((Date.now() - started) / 1000).toFixed(1)}s (budget ${settings.ollama.readyTimeoutMs}ms)`);
+    ui.ok(`Ollama ready in ${((Date.now() - started) / 1000).toFixed(1)}s (budget ${ollamaProvider.readyTimeoutMs}ms)`);
   } catch (err) {
     fail(err instanceof Error ? err.message : String(err));
     return false;
@@ -66,7 +71,7 @@ export async function doctor(settings: Settings, cwd: string): Promise<boolean> 
 
   for (const [role, model] of Object.entries(settings.models)) {
     try {
-      const ok = await client.supportsTools(model, settings.ollama.requestTimeoutMs);
+      const ok = await client.supportsTools(model, ollamaProvider.requestTimeoutMs);
       if (ok) ui.ok(`${role} model ${model} supports tool calling`);
       else fail(`${role} model ${model} does NOT support tool calling in Ollama; pick a tool-capable model.`);
     } catch (err) {

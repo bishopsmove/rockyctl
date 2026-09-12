@@ -10,7 +10,7 @@ import { join } from "node:path";
 import { unlinkSync, existsSync, readFileSync } from "node:fs";
 
 function settings(baseUrl: string, over: Partial<{ requestTimeoutMs: number }> = {}) {
-  return SettingsSchema.parse({ ollama: { baseUrl, ...over } }).ollama;
+  return SettingsSchema.parse({ providers: [{ providerName: "ollama", baseUrl, ...over }] }).providers.find(p => p.providerName === "ollama")!;
 }
 
 test("ollama client returns all expected metrics in chat response", async () => {

@@ -17,11 +17,11 @@ const runCommand = (args: string[]) => {
   return result;
 };
 
-test("rockyctl config --set ollama:readyTimeoutMs 5000 succeeds", () => {
+test("rockyctl config --set providers:0:readyTimeoutMs 5000 succeeds", () => {
   // We assume a valid config file exists because tests/config_cli.test.ts passed
-  const result = runCommand(["config", "--set", "5000", "--field", "ollama:readyTimeoutMs"]);
+  const result = runCommand(["config", "--set", "5000", "--field", "providers:0:readyTimeoutMs"]);
   assert.strictEqual(result.status, 0, `Expected success, got ${result.status}. stdout: ${result.stdout}`);
-  assert.ok(result.stdout.includes("Updated ollama:readyTimeoutMs to 5000"));
+  assert.ok(result.stdout.includes("Updated providers:0:readyTimeoutMs to 5000"));
 
   // Verify change in file
   const configPath = resolve(projectRoot, ".rockyctl/config/rockyctl.yaml");

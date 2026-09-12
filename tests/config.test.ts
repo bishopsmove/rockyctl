@@ -7,7 +7,7 @@ import { loadSettings, SettingsSchema } from "../src/config.js";
 import { tmpdir } from "node:os";
 import { execSync } from "node:child_process";
 
-const projectRoot = fileURLToPath(new URL(".", import.meta.url).href); // This might not be right, let's use a safer way.
+// const projectRoot = fileURLToPath(new URL(".", import.meta.url).href); // This might not be right, let's use a safer way.
 // Actually, dirname(fileURLToPath(import.meta.url)) is the directory of the current file.
 // tests/config.test.ts -> dirname is tests/
 // dirname(tests/) -> project root.
@@ -22,8 +22,9 @@ test("loadSettings loads workingFolder from yaml in new location", () => {
 
   try {
     const yamlContent = `
-ollama:
-  baseUrl: http://localhost:11434
+providers:
+  - providerName: ollama
+    baseUrl: http://localhost:11434
 files:
   workingFolder: /tmp/custom-working-dir
 `;
@@ -43,8 +44,9 @@ test("loadSettings uses default workingFolder if not provided in new location", 
 
   try {
     const yamlContent = `
-ollama:
-  baseUrl: http://localhost:11434
+providers:
+  - providerName: ollama
+    baseUrl: http://localhost:11434
 `;
     writeFileSync(resolve(configDir, "rockyctl.yaml"), yamlContent);
 
@@ -87,8 +89,9 @@ tasks:
     writeFileSync(resolve(testDir, ".rockyctl", "tasks.yaml"), tasksContent);
 
     const settingsContent = `
-ollama:
-  baseUrl: http://localhost:11434
+providers:
+  - providerName: ollama
+    baseUrl: http://localhost:11434
 files:
   tasks: ".rockyctl/tasks.yaml"
 `;
@@ -109,15 +112,16 @@ function settingsDirWith(content: string): string {
   return testDir;
 }
 
-test("thinkEffort setting loads when present under the ollama section", () => {
+test("thinkEffort setting loads when present under the ollama provider", () => {
   const testDir = settingsDirWith(`
-ollama:
-  baseUrl: http://localhost:11434
-  thinkEffort: high
+providers:
+  - providerName: ollama
+    baseUrl: http://localhost:11434
+    thinkEffort: high
 `);
   try {
     const settings = loadSettings(testDir);
-    assert.strictEqual(settings.ollama.thinkEffort, "high");
+    assert.strictEqual(settings.providers[0].thinkEffort, "high");
   } finally {
     rmSync(testDir, { recursive: true, force: true });
   }
@@ -125,34 +129,35 @@ ollama:
 
 test("thinkEffort accepts low, medium, high and boolean values", () => {
   const parsed = SettingsSchema.parse({
-    ollama: { baseUrl: "http://localhost:11434", thinkEffort: "low" },
+    providers: [{ providerName: "ollama", baseUrl: "http://localhost:11434", thinkEffort: "low" }],
   });
-  assert.strictEqual(parsed.ollama.thinkEffort, "low");
+  assert.strictEqual(parsed.providers[0].thinkEffort, "low");
 
   const parsed2 = SettingsSchema.parse({
-    ollama: { baseUrl: "http://localhost:11434", thinkEffort: "medium" },
+    providers: [{ providerName: "ollama", baseUrl: "http://localhost:11434", thinkEffort: "medium" }],
   });
-  assert.strictEqual(parsed2.ollama.thinkEffort, "medium");
+  assert.strictEqual(parsed2.providers[0].thinkEffort, "medium");
 
   const parsedTrue = SettingsSchema.parse({
-    ollama: { baseUrl: "http://localhost:11434", thinkEffort: true },
+    providers: [{ providerName: "ollama", baseUrl: "http://localhost:11434", thinkEffort: true }],
   });
-  assert.strictEqual(parsedTrue.ollama.thinkEffort, true);
+  assert.strictEqual(parsedTrue.providers[0].thinkEffort, true);
 
   const parsedFalse = SettingsSchema.parse({
-    ollama: { baseUrl: "http://localhost:11434", thinkEffort: false },
+    providers: [{ providerName: "ollama", baseUrl: "http://localhost:11434", thinkEffort: false }],
   });
-  assert.strictEqual(parsedFalse.ollama.thinkEffort, false);
+  assert.strictEqual(parsedFalse.providers[0].thinkEffort, false);
 });
 
 test("thinkEffort defaults to absent when not in the settings file", () => {
   const testDir = settingsDirWith(`
-ollama:
-  baseUrl: http://localhost:11434
+providers:
+  - providerName: ollama
+    baseUrl: http://localhost:11434
 `);
   try {
     const settings = loadSettings(testDir);
-    assert.ok(!("thinkEffort" in settings.ollama) || settings.ollama.thinkEffort === undefined);
+    assert.ok(!("thinkEffort" in settings.providers[0]) || settings.providers[0].thinkEffort === undefined);
   } finally {
     rmSync(testDir, { recursive: true, force: true });
   }
@@ -160,9 +165,9 @@ ollama:
 
 test("invalid thinkEffort values are rejected", () => {
   assert.throws(
-    () => SettingsSchema.parse({ ollama: { baseUrl: "http://localhost:11434", thinkEffort: "maximum" } }),
+    () => SettingsSchema.parse({ providers: [{ providerName: "ollama", baseUrl: "http://localhost:11434", thinkEffort: "maximum" }] }),
   );
   assert.throws(
-    () => SettingsSchema.parse({ ollama: { baseUrl: "http://localhost:11434", thinkEffort: 42 } }),
+    () => SettingsSchema.parse({ providers: [{ providerName: "ollama", baseUrl: "http://localhost:11434", thinkEffort: 42 }] }),
   );
 });
