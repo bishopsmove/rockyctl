@@ -93,6 +93,14 @@ async function runIterations(
     }
 
     const attempts = task.attempts + 1;
+    if(settings.loop.maxAttempts < attempts)
+    {
+      /** Preliminary check on `maxAttempts` */
+      ui.warn(`Task ${task.id} has exceeded maxAttempts (${settings.loop.maxAttempts}). Task is now blocked.`);
+      store.update(task.id, { status: "blocked" });
+      log.event("task.blocked", { task: task.id });
+      continue;
+    }
     store.update(task.id, { attempts, status: "in_progress" });
 
     ui.info("");
