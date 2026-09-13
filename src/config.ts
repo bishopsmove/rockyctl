@@ -23,10 +23,6 @@ const ProviderSchema = z.object({
   maxRetries: z.number().int().nonnegative().default(2),
   // Base delay (ms) before the first retry; doubles each subsequent attempt.
   retryBackoffMs: z.number().int().positive().default(1_000),
-  // Optional reasoning effort for models that support extended thinking. Sent as the
-  // top-level `think` field on /api/chat and /api/generate requests. When this key is
-  // absent, the `think` field is not sent at all.
-  thinkEffort: z.union([z.enum(["low", "medium", "high"]), z.boolean()]).optional(),
 });
 
 export type Provider = z.infer<typeof ProviderSchema>;
@@ -45,6 +41,7 @@ const ProvidersSchema = z.array(ProviderSchema).default([{
 const ModelConfigSchema = z.object({
   name: z.string(),
   temp: z.number().optional(),
+  thinkEffort: z.union([z.enum(["low", "medium", "high"]), z.boolean()]).optional(),
 });
 
 const ModelsSchema = z.object({

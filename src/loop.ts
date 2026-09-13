@@ -202,6 +202,7 @@ async function runGenerator(
         onToken: progress,
         onRetry: makeRetryHandler(log, "generator", task.id),
         temperature: settings.models.generator.temp,
+        thinkEffort: settings.models.generator.thinkEffort,
       });
     } finally {
       progress.done();
@@ -301,6 +302,7 @@ async function runJudge(
       res = await client.chat(settings.models.judge.name, messages, {
         tools: JUDGE_TOOLS,
         temperature: settings.models.judge.temp ?? 0,
+        thinkEffort: settings.models.judge.thinkEffort,
         onToken: progress,
         onRetry: makeRetryHandler(log, "judge", task.id),
       });
@@ -371,6 +373,7 @@ async function runJudge(
     const retry = await client.chat(settings.models.judge.name, messages, {
       format: "json",
       temperature: settings.models.judge.temp ?? 0,
+      thinkEffort: settings.models.judge.thinkEffort,
       onRetry: makeRetryHandler(log, "judge", task.id),
     });
     const parsed2 = parseVerdict(retry.message.content ?? "");

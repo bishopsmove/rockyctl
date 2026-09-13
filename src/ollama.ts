@@ -1,5 +1,5 @@
 import { Agent, fetch as undiciFetch, type Response as UndiciResponse } from "undici";
-import type { Settings, Provider } from "./config.js";
+import type { Provider, Settings, ThinkEffort } from "./config.js";
 
 export interface ChatMessage {
   role: "system" | "user" | "assistant" | "tool";
@@ -73,7 +73,38 @@ export class OllamaError extends Error {
   }
 }
 
-export class OllamaClient {
+/**
+ * Abstraction layer for model utilization.
+ */
+export interface HostProvider {
+  waitUntilReady(models: string[], progress: ProgressFn): Promise<void>;
+  chat(
+    model: string,
+    messages: ChatMessage[],
+    opts: {
+      tools?: ToolDefinition[];
+      format?: "json" | Record<string, unknown>;
+      temperature?: number;
+      thinkEffort?: ThinkEffort;
+      onToken?: TokenFn;
+      onRetry?: RetryFn;
+    },
+  ): Promise<ChatResponse>;
+  generate(
+    model: string,
+    prompt: string,
+    opts: {
+      system?: string;
+      format?: "json" | Record<string, unknown>;
+      temperature?: number;
+      thinkEffort?: ThinkEffort;
+    },
+  ): Promise<GenerateResponse>;
+  loadedModels(timeoutMs?: number): Promise<LoadedModel[]>;
+  supportsTools(model: string, timeoutMs: number): Promise<boolean>;
+}
+
+export class OllamaClient implements HostProvider {
   private readonly provider: Provider;
   private readonly agent: Agent;
 
@@ -85,18 +116,13 @@ export class OllamaClient {
     this.agent = new Agent({
       headersTimeout: 0,
       bodyTimeout: 0,
-      connectTimeout: 10_000,
+        connectTimeout: 10_000,
       keepAliveTimeout: 60_000,
     });
   }
 
   private get baseUrl(): string {
     return this.provider.baseUrl.replace(/\/+$/, "");
-  }
-
-  /** The `think` field to include on generation requests, or undefined to omit it. */
-  private get think(): boolean | "low" | "medium" | "high" | undefined {
-    return this.provider.thinkEffort;
   }
 
   /** Cheap reachability probe. Resolves to the model list, rejects if the server is down. */
@@ -148,6 +174,7 @@ export class OllamaClient {
       tools?: ToolDefinition[];
       format?: "json" | Record<string, unknown>;
       temperature?: number;
+      thinkEffort?: ThinkEffort;
       onToken?: TokenFn;
       onRetry?: RetryFn;
     } = {},
@@ -172,6 +199,7 @@ export class OllamaClient {
       tools?: ToolDefinition[];
       format?: "json" | Record<string, unknown>;
       temperature?: number;
+      thinkEffort?: ThinkEffort;
       onToken?: TokenFn;
       onRetry?: RetryFn;
     },
@@ -188,9 +216,9 @@ export class OllamaClient {
     };
     if (opts.tools?.length) body.tools = opts.tools;
     if (opts.format) body.format = opts.format;
-    // Only send `think` when the user opted in via `ollama.thinkEffort`; when that
+    // Only send `think` when the user opted in via `models{0}.thinkEffort`; when that
     // setting is absent the field is omitted entirely so Ollama uses its own default.
-    if (this.think !== undefined) body.think = this.think;
+    if (opts.thinkEffort !== undefined) body.think = opts.thinkEffort;
 
     const started = Date.now();
     const controller = new AbortController();
@@ -250,7 +278,7 @@ export class OllamaClient {
 
   /**
    * Non-streaming one-shot generation via /api/generate. Used for prompts that don't need
-   * tool calling or streaming progress. Honours the `ollama.thinkEffort` setting: when it
+   * tool calling or streaming progress. Honours the `thinkEffort` setting: when it
    * is present the top-level `think` field is set to its value; when it is absent the
    * field is omitted entirely so Ollama uses its own default. Also supports temperature per-model.
    */
@@ -261,6 +289,7 @@ export class OllamaClient {
       system?: string;
       format?: "json" | Record<string, unknown>;
       temperature?: number;
+      thinkEffort?: ThinkEffort;
     } = {},
   ): Promise<GenerateResponse> {
     const body: Record<string, unknown> = {
@@ -275,7 +304,7 @@ export class OllamaClient {
     };
     if (opts.system) body.system = opts.system;
     if (opts.format) body.format = opts.format;
-    if (this.think !== undefined) body.think = this.think;
+    if (opts.thinkEffort !== undefined) body.think = opts.thinkEffort;
 
     const res = await this.fetch(
       "/api/generate",
@@ -376,7 +405,7 @@ export class OllamaClient {
 
     for (const model of [...new Set(models)]) {
       if (remaining() <= 0) {
-        throw new OllamaError(`Timed out before warming ${model} (readyTimeoutMs=${this.provider.readyTimeoutMs})`);
+        throw new OllamaError(`Timed out before warming ${model} (readyTimeoutMs=${this.provider.readyTimeoutMs}ms)`);
       }
 
       const isLoaded = loadedModels.some(

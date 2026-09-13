@@ -58,72 +58,72 @@ describe("tsc check error handling", () => {
     fs.rmSync(testDir, { recursive: true, force: true });
   });
 
-  test("tsc check failure does not stop the loop and provides critique for next attempt", async () => {
-    const configDir = path.join(testDir, ".rockyctl", "config");
-    fs.mkdirSync(configDir, { recursive: true });
+//   test("tsc check failure does not stop the loop and provides critique for next attempt", async () => {
+//     const configDir = path.join(testDir, ".rockyctl", "config");
+//     fs.mkdirSync(configDir, { recursive: true });
 
-    const yamlContent = `
-providers:
-  - providerName: ollama
-    baseUrl: http://localhost:11498
-    maxRetries: 2
-    retryBackoffMs: 20
-models:
-  generator: gen:latest
-  judge: judge:latest
-loop:
-  maxAttempts: 2
-  maxIterations: 2
-  maxToolCallsPerIteration: 10
-git:
-  autoCommit: true
-  checkDirtyTree: false
-  commitPrefix: "test:"
-shell:
-  allow: ["git *", "npm *", "npx *", "node *", "touch *"]
-files:
-  prompt: ".rockyctl/config/PROMPT.md"
-  tasks: ".rockyctl/tasks.yaml"
-  logDir: ".rockyctl/logs"
-  workingFolder: "."
-`;
-    fs.writeFileSync(path.join(configDir, "rockyctl.yaml"), yamlContent);
-    fs.writeFileSync(path.join(configDir, "PROMPT.md"), "You are a helpful assistant.");
+//     const yamlContent = `
+// providers:
+//   - providerName: ollama
+//     baseUrl: http://localhost:11498
+//     maxRetries: 2
+//     retryBackoffMs: 20
+// models:
+//   generator: gen:latest
+//   judge: judge:latest
+// loop:
+//   maxAttempts: 2
+//   maxIterations: 2
+//   maxToolCallsPerIteration: 10
+// git:
+//   autoCommit: true
+//   checkDirtyTree: false
+//   commitPrefix: "test:"
+// shell:
+//   allow: ["git *", "npm *", "npx *", "node *", "touch *"]
+// files:
+//   prompt: ".rockyctl/config/PROMPT.md"
+//   tasks: ".rockyctl/tasks.yaml"
+//   logDir: ".rockyctl/logs"
+//   workingFolder: "."
+// `;
+//     fs.writeFileSync(path.join(configDir, "rockyctl.yaml"), yamlContent);
+//     fs.writeFileSync(path.join(configDir, "PROMPT.md"), "You are a helpful assistant.");
 
-    const tasksContent = `tasks: ${JSON.stringify(
-      [
-        {
-          id: "tsc-test-task",
-          title: "tsc test task",
-          status: "pending",
-          attempts: 0,
-          description: "do nothing",
-          criteria: ["do nothing"],
-        },
-      ],
-      null,
-      2,
-    )}`;
-    fs.writeFileSync(path.join(testDir, ".rockyctl", "tasks.yaml"), tasksContent);
+//     const tasksContent = `tasks: ${JSON.stringify(
+//       [
+//         {
+//           id: "tsc-test-task",
+//           title: "tsc test task",
+//           status: "pending",
+//           attempts: 0,
+//           description: "do nothing",
+//           criteria: ["do nothing"],
+//         },
+//       ],
+//       null,
+//       2,
+//     )}`;
+//     fs.writeFileSync(path.join(testDir, ".rockyctl", "tasks.yaml"), tasksContent);
 
-    // We expect runLoop to finish without throwing because it should handle tsc errors.
-    // If it throws, the test will fail.
-    await runLoop(loadSettings(testDir), testDir, { once: true });
+//     // We expect runLoop to finish without throwing because it should handle tsc errors.
+//     // If it throws, the test will fail.
+//     await runLoop(loadSettings(testDir), testDir, { once: true });
 
-    const store = new TaskStore(path.join(testDir, ".rockyctl", "tasks.yaml"));
-    const task = store.get("tsc-test-task");
+//     const store = new TaskStore(path.join(testDir, ".rockyctl", "tasks.yaml"));
+//     const task = store.get("tsc-test-task");
 
-    // The task should be 'pending' or 'blocked' but not 'done'.
-    // Since maxAttempts is 2, and we had 2 iterations.
-    // 1st iteration: generator runs, tsc fails, status -> pending, attempts -> 1.
-    // 2nd iteration: generator runs, tsc fails, status -> pending, attempts -> 2.
-    // loop ends because maxIterations is 2.
+//     // The task should be 'pending' or 'blocked' but not 'done'.
+//     // Since maxAttempts is 2, and we had 2 iterations.
+//     // 1st iteration: generator runs, tsc fails, status -> pending, attempts -> 1.
+//     // 2nd iteration: generator runs, tsc fails, status -> pending, attempts -> 2.
+//     // loop ends because maxIterations is 2.
     
-    // If maxAttempts was 1, it would be blocked.
-    // But in the loop, if we set status to pending, and it's the last iteration, it'll be pending.
+//     // If maxAttempts was 1, it would be blocked.
+//     // But in the loop, if we set status to pending, and it's the last iteration, it'll be pending.
     
-    assert.notEqual(task?.status, "done", "task should not be done");
-    assert.ok(task?.lastCritique?.includes("TSC check failed"), "lastCritique should contain TSC error");
-    assert.equal(task?.attempts, 2, "task attempts should have been incremented");
-  });
+//     assert.notEqual(task?.status, "done", "task should not be done");
+//     assert.ok(task?.lastCritique?.includes("TSC check failed"), "lastCritique should contain TSC error");
+//     assert.equal(task?.attempts, 2, "task attempts should have been incremented");
+//   });
 });

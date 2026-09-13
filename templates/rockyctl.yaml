@@ -19,20 +19,22 @@ providers:
     maxRetries: 2
     # Base delay (ms) before the first retry; doubles each subsequent attempt.
     retryBackoffMs: 1000
-    # Reasoning effort for models that support extended thinking. Sent as the
-    # top-level `think` field on /api/chat and /api/generate requests. Accepts "low", "medium",
-    # "high", true or false. When this key is omitted, the `think` field is not sent at all.
-    # thinkEffort: low
 
 models:
   # Writes the code. Must support tool calling in Ollama (`rockyctl doctor` verifies this).
   generator:
     name: gemma4:26b-a4b-it-qat
     temp: 0.7
+    # Reasoning effort for models that support extended thinking. Sent as the
+    # top-level `think` field on /api/chat and /api/generate requests. Accepts "low", "medium",
+    # "high", true or false. When this key is omitted, the `think` field is not sent at all.
+    thinkEffort: low
   # Grades each attempt against the task's criteria. Never the same context as the generator.
   judge:
     name: gemma4:12b-it-qat
     temp: 0.0
+    # Reasoning effort for models that support extended thinking.
+    thinkEffort: medium
 
 loop:
   # Failed judge verdicts per task before it is marked `blocked` instead of being retried.
@@ -54,15 +56,15 @@ git:
   commitPrefix: "rockyctl:"
 
 shell:
-  # Allowlist for the `run_command` tool. Anything not matching is refused.
-  # Patterns are matched token by token: "*" matches any single token and a trailing "*" matches
-  # everything after it. Commands run WITHOUT a shell, so pipes, redirects, `&&`, and shell
-  # builtins are rejected outright — that is what keeps the allowlist meaningful.
+  # Allowlist patterns. Each pattern is matched token-by-token against the command;
+  # "*" matches any single token and a trailing "*" matches everything after it.
+  # Commands run WITHOUT a shell, so pipes, redirects, `&&`, and shell
+  # builtins are rejected outright — this is what keeps the allowlist meaningful.
   #
   # Keep this platform-neutral. Prefer cross-platform tools (git, npm, node, dotnet, python)
-  # over OS-specific tools (ls/cat/grep on Unix, dir/type/del on Windows). The model is given
+  # over OS-specific tools (ls/cat/grep/dir/type/del/type on Windows). The model is given
   # file tools (read_file, write_file, list_dir, search_files) so it never needs coreutils.
-  # `rockyctl doctor` warns about entries that will not work on the current OS.
+  # `rockyctl doctor` warns of entries that will not work on the current OS.
   allow:
     - "git *"
     - "npm *"
