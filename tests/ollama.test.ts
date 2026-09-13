@@ -110,9 +110,9 @@ test("chat retries after a transient connection reset and eventually succeeds", 
   const port = (server.address() as AddressInfo).port;
   try {
     const client = new OllamaClient(settings(`http://127.0.0.1:${port}`, { maxRetries: 2, retryBackoffMs: 10 }) as Provider);
-    const retries: { attempt: number; maxAttempts: number; error: string }[] = [];
+    const retries: { attempt: number; maxAttempts: number; delayMs: number; error: string }[] = [];
     const res = await client.chat("m", [{ role: "user", content: "hi" }], {
-      onRetry: (info) => retries.push({ attempt: info.attempt, maxAttempts: info.maxAttempts, error: info.error }),
+      onRetry: (info) => retries.push(info),
     });
     assert.equal(res.message.content, "ok");
     assert.equal(requestCount, 2);
@@ -148,12 +148,12 @@ test("chat does not retry a deliberate requestTimeoutMs abort", async () => {
 });
 
 test("chat does not retry an HTTP 4xx", async () => {
+  let requestCount = 0;
   const server = createServer((_req, res) => {
     requestCount++;
     res.writeHead(400, { "content-type": "application/json" });
     res.end(JSON.stringify({ error: "model does not support tools" }));
   });
-  let requestCount = 0;
   await new Promise<void>((r) => server.listen(0, r));
   const port = (server.address() as AddressInfo).port;
   try {
@@ -282,8 +282,7 @@ test("waitUntilReady calls /api/ps and only warms up missing models", async () =
       let body = "";
       req.on("data", chunk => { body += chunk; });
       req.on("end", () => {
-        const parsed = JSON.parse(body);
-        warmUps.push(parsed.model);
+        warmUps.push(JSON.parse(body).model);
         res.writeHead(200, { "content-type": "application/x-ndjson" });
         res.end(JSON.stringify({ message: { content: "ok" }, done: true }) + "\n");
       });
@@ -301,6 +300,52 @@ test("waitUntilReady calls /api/ps and only warms up missing models", async () =
 
     assert.strictEqual(psCalled, true, "should have called /api/ps");
     assert.deepStrictEqual(warmUps, ["model2"], "should only warm up model2");
+  } finally {
+    server.close();
+  }
+});
+
+test("chat sends the temperature in the request body", async () => {
+  let receivedBody: Record<string, unknown> | undefined;
+  const server = createServer((req, res) => {
+    let raw = "";
+    req.on("data", (chunk) => { raw += chunk; });
+    req.on("end", () => {
+      receivedBody = JSON.parse(raw);
+      res.writeHead(200, { "content-type": "application/x-ndjson" });
+      res.end(JSON.stringify({ message: { role: "assistant", content: "ok" }, done: true }) + "\n");
+    });
+  });
+  await new Promise<void>((r) => server.listen(0, r));
+  const port = (server.address() as AddressInfo).port;
+  try {
+    const client = new OllamaClient(settings(`http://127.0.0.1:${port}`) as Provider);
+    await client.chat("m", [{ role: "user", content: "hi" }], { temperature: 0.5 });
+    assert.ok(receivedBody, "server should have received the chat request");
+    assert.equal(receivedBody.options?.temperature, 0.5);
+  } finally {
+    server.close();
+  }
+});
+
+test("generate sends the temperature in the request body", async () => {
+  let receivedBody: Record<string, unknown> | undefined;
+  const server = createServer((req, res) => {
+    let raw = "";
+    req.on("data", (chunk) => { raw += chunk; });
+    req.on("end", () => {
+      receivedBody = JSON.parse(raw);
+      res.writeHead(200, { "content-type": "application/json" });
+      res.end(JSON.stringify({ response: "ok", done: true }));
+    });
+  });
+  await new Promise<void>((r) => server.listen(0, r));
+  const port = (server.address() as AddressInfo).port;
+  try {
+    const client = new OllamaClient(settings(`http://127.0.0.1:${port}`) as Provider);
+    await client.generate("m", "hello", { temperature: 0.7 });
+    assert.ok(receivedBody, "server should have received the generate request");
+    assert.equal(receivedBody.options?.temperature, 0.7);
   } finally {
     server.close();
   }

@@ -104,7 +104,7 @@ files:
   }
 });
 
-function settingsDirWith(content: string): string {
+function settingsDirWith(content: string) {
   const testDir = resolve(tmpdir(), "rockyctl-test-" + Date.now().toString() + "-" + Math.random().toString(36).slice(2));
   const configDir = resolve(testDir, ".rockyctl", "config");
   mkdirSync(configDir, { recursive: true });
@@ -170,4 +170,35 @@ test("invalid thinkEffort values are rejected", () => {
   assert.throws(
     () => SettingsSchema.parse({ providers: [{ providerName: "ollama", baseUrl: "http://localhost:11434", thinkEffort: 42 }] }),
   );
+});
+
+test("temp setting loads when present in models", () => {
+  const testDir = settingsDirWith(`
+models:
+  generator:
+    name: gemma:latest
+    temp: 0.5
+  judge:
+    name: gemma:latest
+    temp: 0.8
+`);
+  try {
+    const settings = loadSettings(testDir);
+    assert.strictEqual(settings.models.generator.temp, 0.5);
+    assert.strictEqual(settings.models.judge.temp, 0.8);
+  } finally {
+    rmSync(testDir, { recursive: true, force: true });
+  }
+});
+
+test("temp setting can be a string for model name and number for temp", () => {
+  const parsed = SettingsSchema.parse({
+    models: {
+      generator: "gemma:latest",
+      judge: { name: "gemma:latest", temp: 0.7 }
+    }
+  });
+  assert.strictEqual(parsed.models.generator.name, "gemma:latest");
+  assert.strictEqual(parsed.models.judge.name, "gemma:latest");
+  assert.strictEqual(parsed.models.judge.temp, 0.7);
 });
