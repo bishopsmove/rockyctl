@@ -67,7 +67,7 @@ async function runIterations(
   log: RunLog,
   opts: RunOptions,
 ): Promise<void> {
-  const maxLoopCount = Math.min(settings.loop.maxAttempts, settings.loop.maxIterations);
+  const maxLoopCount = settings.loop.maxIterations;
   for (let iteration = 1; iteration <= maxLoopCount; iteration++) {
     const task = opts.taskId ? store.get(opts.taskId) : store.next();
     if (!task) {
