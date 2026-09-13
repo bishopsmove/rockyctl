@@ -39,7 +39,9 @@ export async function doctor(settings: Settings, cwd: string): Promise<boolean> 
   const client = new OllamaClient(ollamaProvider);
   const started = Date.now();
   try {
-    await client.waitUntilReady([settings.models.generator, settings.models.judge], ui.step);
+    const generatorModel = typeof settings.models.generator === 'string' ? settings.models.generator : settings.models.generator.name;
+    const judgeModel = typeof settings.models.judge === 'string' ? settings.models.judge : settings.models.judge.name;
+    await client.waitUntilReady([generatorModel, judgeModel], ui.step);
     ui.ok(`Ollama ready in ${((Date.now() - started) / 1000).toFixed(1)}s (budget ${ollamaProvider.readyTimeoutMs}ms)`);
   } catch (err) {
     fail(err instanceof Error ? err.message : String(err));
@@ -47,21 +49,22 @@ export async function doctor(settings: Settings, cwd: string): Promise<boolean> 
   }
 
   // Where did the models actually land? A model that only partially fits in VRAM runs on
-  // CPU for the rest and can be 10x slower — the usual reason a first iteration "hangs".
+  // CPU for the rest and is can be 10x slower — the usual reason a first iteration "hangs".
   try {
     const loaded = await client.loadedModels();
     const gb = (n: number) => (n / 1024 ** 3).toFixed(1) + " GB";
-    for (const model of new Set(Object.values(settings.models))) {
-      const m = loaded.find((l) => l.name === model || l.name === `${model}:latest`);
+    for (const modelCfg of Object.values(settings.models)) {
+      const modelName = typeof modelCfg === 'string' ? modelCfg : modelCfg.name;
+      const m = loaded.find((l) => l.name === modelName || l.name === `${modelName}:latest`);
       if (!m) {
-        ui.warn(`${model} is not resident after warm-up (evicted already? check keepAlive / other clients).`);
+        ui.warn(`${modelName} is not resident after warm-up (evicted already? check keepAlive / other clients).`);
         continue;
       }
       const pct = m.size ? Math.round((m.size_vram / m.size) * 100) : 0;
       const ctx = m.context_length ? `, ctx ${m.context_length}` : "";
-      if (pct >= 100) ui.ok(`${model}: ${gb(m.size)} fully in GPU memory${ctx}`);
-      else if (pct === 0) ui.warn(`${model}: ${gb(m.size)} loaded entirely on CPU${ctx} — expect very slow generation.`);
-      else ui.warn(`${model}: ${gb(m.size)} loaded, only ${pct}% in GPU memory${ctx} — partial CPU offload, expect slow generation.`);
+      if (pct >= 100) ui.ok(`${modelName}: ${gb(m.size)} fully in GPU memory${ctx}`);
+      else if (pct === 0) ui.warn(`${modelName}: ${gb(m.size)} loaded entirely on CPU${ctx} — expect very slow generation.`);
+      else ui.warn(`${modelName}: ${gb(m.size)} loaded, only ${pct}% in GPU memory${ctx} — partial CPU offload, expect slow generation.`);
     }
     const total = loaded.reduce((a, m) => a + m.size, 0);
     if (loaded.length > 1) ui.info(`  ${loaded.length} models resident, ${gb(total)} total. If they don't both fit, Ollama will swap them every iteration.`);
@@ -69,13 +72,14 @@ export async function doctor(settings: Settings, cwd: string): Promise<boolean> 
     ui.warn(`Could not query /api/ps: ${err instanceof Error ? err.message : String(err)}`);
   }
 
-  for (const [role, model] of Object.entries(settings.models)) {
+  for (const [role, modelCfg] of Object.entries(settings.models)) {
+    const modelName = typeof modelCfg === 'string' ? modelCfg : modelCfg.name;
     try {
-      const ok = await client.supportsTools(model, ollamaProvider.requestTimeoutMs);
-      if (ok) ui.ok(`${role} model ${model} supports tool calling`);
-      else fail(`${role} model ${model} does NOT support tool calling in Ollama; pick a tool-capable model.`);
+      const ok = await client.supportsTools(modelName, ollamaProvider.requestTimeoutMs);
+      if (ok) ui.ok(`${role} model ${modelName} supports tool calling`);
+      else fail(`${role} model ${modelName} does NOT support tool calling in Ollama; pick a tool-capable model.`);
     } catch (err) {
-      fail(`${role} model ${model}: tool probe failed: ${err instanceof Error ? err.message : String(err)}`);
+      fail(`${role} model ${modelName}: tool probe failed: ${err instanceof Error ? err.message : String(err)}`);
     }
   }
 

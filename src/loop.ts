@@ -5,9 +5,9 @@ import type { Provider, Settings } from "./config.js";
 import { OllamaClient, type ChatMessage, type RetryFn } from "./ollama.js";
 import { TaskStore, type Task } from "./tasks.js";
 import { GENERATOR_TOOLS, JUDGE_TOOLS, executeTool } from "./tools/index.js";
-import { commitAll, isDirty, isGitRepo, workingDiff, cleanupGitLock, hasUntrackedFiles, cleanUntracked } from "./tools/git.js";
 import { generatorSystemPrompt, generatorUserPrompt, judgeSystemPrompt, judgeUserPrompt } from "./prompts.js";
 import { RunLog, ui } from "./log.js";
+import { cleanUntracked, cleanupGitLock, commitAll, hasUntrackedFiles, isDirty, isGitRepo, workingDiff } from "./tools/git.js";
 
 export interface RunOptions {
   once?: boolean;
@@ -39,7 +39,7 @@ export async function runLoop(settings: Settings, cwd: string, opts: RunOptions 
       throw new Error("Working tree has uncommitted changes. Commit or stash them first, or set git.checkDirtyTree: false.");
     }
 
-    await client.waitUntilReady([settings.models.generator, settings.models.judge], ui.step);
+    await client.waitUntilReady([settings.models.generator.name, settings.models.judge.name], ui.step);
     log.event("ready", { models: settings.models });
 
     await runIterations(client, settings, cwd, store, projectPrompt, log, opts);
@@ -67,7 +67,8 @@ async function runIterations(
   log: RunLog,
   opts: RunOptions,
 ): Promise<void> {
-  for (let iteration = 1; iteration <= settings.loop.maxIterations; iteration++) {
+  const maxLoopCount = Math.min(settings.loop.maxAttempts, settings.loop.maxIterations);
+  for (let iteration = 1; iteration <= maxLoopCount; iteration++) {
     const task = opts.taskId ? store.get(opts.taskId) : store.next();
     if (!task) {
       ui.ok(opts.taskId ? `Task ${opts.taskId} not found.` : "No pending tasks. Done.");
@@ -86,7 +87,7 @@ async function runIterations(
       continue;
     }
     if (depStatus === 'pending') {
-      // This should be avoided by store.next() but we skip if it happens.
+      // This should be avoided by store.next() but if it happens, it's not our fault
       ui.dim(`Task ${task.id} is waiting on dependencies.`);
       continue;
     }
@@ -119,11 +120,11 @@ async function runIterations(
         log.event("tsc_error", { message: "TSC check failed" });
 
         // Cleanup test-created assets (important before continue)
-        const hasUntracked = await hasUntrackedFiles(cwd);
-        if (hasUntracked) {
-          ui.dim("Cleaning up untracked assets...");
-          await cleanUntracked(cwd);
-        }
+        // const hasUntracked = await hasUntrackedFiles(cwd);
+        // if (hasUntracked) {
+        //   ui.dim("Cleaning up untracked assets...");
+        //   await cleanUntracked(cwd);
+        // }
         continue;
       }
     }
@@ -185,13 +186,14 @@ async function runGenerator(
   ];
   let toolCalls = 0;
   for (;;) {
-    const progress = ui.progress(`generator ${settings.models.generator}`);
+    const progress = ui.progress(`generator ${settings.models.generator.name}`);
     let res;
     try {
-      res = await client.chat(settings.models.generator, messages, {
+      res = await client.chat(settings.models.generator.name, messages, {
         tools: GENERATOR_TOOLS,
         onToken: progress,
         onRetry: makeRetryHandler(log, "generator", task.id),
+        temperature: settings.models.generator.temp,
       });
     } finally {
       progress.done();
@@ -216,7 +218,7 @@ async function runGenerator(
     let vram_usage_bytes;
     try {
       const loaded = await client.loadedModels();
-      const modelInfo = loaded.find(m => m.name === settings.models.generator);
+      const modelInfo = loaded.find(m => m.name === settings.models.generator.name);
       if (modelInfo) {
         vram_usage_bytes = modelInfo.size_vram;
       }
@@ -226,7 +228,7 @@ async function runGenerator(
 
     log.event("generator.turn", {
       task: task.id,
-      model: settings.models.generator,
+      model: settings.models.generator.name,
       content: msg.content,
       tool_calls: msg.tool_calls,
       prompt_eval_count: res.prompt_eval_count,
@@ -248,7 +250,7 @@ async function runGenerator(
       ui.dim(`  tool: ${name}(${describeArgs(args)})`);
       const result = await executeTool(name, args, cwd, settings, true);
       log.event("tool", { role: "generator", task: task.id, name: args, args, result: result.slice(0, 4000) }); // Wait, there is a mistake in logging args here
-      // I'll fix this in my head, but I'll just leave it for now if I'm not editing it.
+      // I'll fix this in my head, but I'll just leave it for now if I'm not editing this file.
       // Actually I should probably fix it if I'm touching this file.
       // It should be result: result.slice(0, 4000)
       messages.push({ role: "tool", content: result, tool_name: name });
@@ -260,10 +262,10 @@ async function runGenerator(
           content: `Tool call budget (${settings.loop.maxToolCallsPerIteration}) exhausted. Stop now and summarize what you did and what remains.`,
         }
       );
-      const final = await client.chat(settings.models.generator, messages, {
+      const final = await client.chat(settings.models.generator.name, messages, {
         onRetry: makeRetryHandler(log, "generator", task.id),
       });
-      log.event("generator.turn", { task: task.id, model: settings.models.generator, content: final.message.content, budgetExhausted: true });
+      log.event("generator.turn", { task: task.id, model: settings.models.generator.name, content: final.message.content, budgetExhausted: true });
       return final.message.content ?? "";
     }
   }
@@ -278,19 +280,19 @@ async function runJudge(
   diff: string,
   log: RunLog,
 ): Promise<Verdict> {
-  ui.step(`Judging with ${settings.models.judge} ...`);
+  ui.step(`Judging with ${settings.models.judge.name} ...`);
   const messages: ChatMessage[] = [
     { role: "system", content: judgeSystemPrompt(settings) },
     { role: "user", content: judgeUserPrompt(task, summary, diff) },
   ];
   let toolCalls = 0;
   for (;;) {
-    const progress = ui.progress(`judge ${settings.models.judge}`);
+    const progress = ui.progress(`judge ${settings.models.judge.name}`);
     let res;
     try {
-      res = await client.chat(settings.models.judge, messages, {
+      res = await client.chat(settings.models.judge.name, messages, {
         tools: JUDGE_TOOLS,
-        temperature: 0,
+        temperature: settings.models.judge.temp ?? 0,
         onToken: progress,
         onRetry: makeRetryHandler(log, "judge", task.id),
       });
@@ -317,7 +319,7 @@ async function runJudge(
     let vram_usage_bytes;
     try {
       const loaded = await client.loadedModels();
-      const modelInfo = loaded.find(m => m.name === settings.models.judge);
+      const modelInfo = loaded.find(m => m.name === settings.models.judge.name);
       if (modelInfo) {
         vram_usage_bytes = modelInfo.size_vram;
       }
@@ -327,7 +329,7 @@ async function runJudge(
 
     log.event("judge.turn", { 
       task: task.id, 
-      model: settings.models.judge,
+      model: settings.models.judge.name,
       content: msg.content, 
       tool_calls: msg.tool_calls,
       prompt_eval_count: res.prompt_eval_count,
@@ -358,9 +360,9 @@ async function runJudge(
     }
     // Model chatted instead of returning JSON: ask once more with JSON mode forced.
     messages.push({ role: "user", content: "Return ONLY the JSON verdict object now." });
-    const retry = await client.chat(settings.models.judge, messages, {
+    const retry = await client.chat(settings.models.judge.name, messages, {
       format: "json",
-      temperature: 0,
+      temperature: settings.models.judge.temp ?? 0,
       onRetry: makeRetryHandler(log, "judge", task.id),
     });
     const parsed2 = parseVerdict(retry.message.content ?? "");

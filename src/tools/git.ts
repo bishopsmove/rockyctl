@@ -56,11 +56,13 @@ export function cleanupGitLock(cwd: string) {
   }
 }
 
+/** Checks to see if there are any untracked files outstanding */
 export async function hasUntrackedFiles(cwd: string): Promise<boolean> {
   const r = await git(["clean", "-nd"], cwd);
   return r.code === 0 && r.out.trim().length > 0;
 }
 
+/** Cleans any outstanding untracked files from git cache */
 export async function cleanUntracked(cwd: string): Promise<void> {
   const r = await git(["clean", "-fd"], cwd);
   if (r.code !== 0) {

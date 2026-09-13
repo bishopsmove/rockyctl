@@ -42,9 +42,24 @@ const ProvidersSchema = z.array(ProviderSchema).default([{
   retryBackoffMs: 1_000,
 }]);
 
+const ModelConfigSchema = z.object({
+  name: z.string(),
+  temp: z.number().optional(),
+});
+
 const ModelsSchema = z.object({
-  generator: z.string().default("gemma4:26b-a4b-it-qat"),
-  judge: z.string().default("gemma4:12b-it-qat"),
+  generator: z.preprocess((val) => {
+    if (typeof val === "string") {
+      return { name: val };
+    }
+    return val;
+  }, ModelConfigSchema).default({ name: "gemma4:26b-a4b-it-qat" }),
+  judge: z.preprocess((val) => {
+    if (typeof val === "string") {
+      return { name: val };
+    }
+    return val;
+  }, ModelConfigSchema).default({ name: "gemma4:12b-it-qat" }),
 });
 
 const LoopSchema = z.object({
@@ -61,7 +76,7 @@ const GitSchema = z.object({
 
 const ShellSchema = z.object({
   // Allowlist patterns. Each pattern is matched token-by-token against the command;
-  // "*" matches any single token, and a trailing "*" matches the rest of the command.
+  // "*" matches any single token and a trailing "*" matches the rest of the command.
   allow: z.array(z.string()).default(["git *", "npm *", "npx *", "node *"]),
   timeoutMs: z.number().int().positive().default(300_000),
   maxOutputChars: z.number().int().positive().default(20_000),

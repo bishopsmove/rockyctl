@@ -12,26 +12,30 @@ providers:
     # Ask Ollama to keep models resident between iterations so we don't reload every loop.
     keepAlive: 30m
     # Context window requested for each call. The generator needs room for tool schemas
-    # plus whatever files it reads; raise this if you see truncation, lower it if VRAM is tight.
+    # plus whatever files it reads; raise this if you see truncation, lower this if VRAM is tight.
     numCtx: 32768
     # Retries for a chat() call after a transient network failure (connection reset/refused,
     # 5xx). A deliberate requestTimeoutMs abort or an HTTP 4xx is never retried.
     maxRetries: 2
     # Base delay (ms) before the first retry; doubles each subsequent attempt.
     retryBackoffMs: 1000
-    # Reasoning effort for models that support extended thinking. Sent as the top-level
-    # `think` field on /api/chat and /api/generate requests. Accepts "low", "medium",
+    # Reasoning effort for models that support extended thinking. Sent as the
+    # top-level `think` field on /api/chat and /api/generate requests. Accepts "low", "medium",
     # "high", true or false. When this key is omitted, the `think` field is not sent at all.
     # thinkEffort: low
 
 models:
   # Writes the code. Must support tool calling in Ollama (`rockyctl doctor` verifies this).
-  generator: gemma4:26b-a4b-it-qat
+  generator:
+    name: gemma4:26b-a4b-it-qat
+    temp: 0.7
   # Grades each attempt against the task's criteria. Never the same context as the generator.
-  judge: gemma4:12b-it-qat
+  judge:
+    name: gemma4:12b-it-qat
+    temp: 0.0
 
 loop:
-  # Failed judge verdicts per task before it is marked `blocked` instead of retried.
+  # Failed judge verdicts per task before it is marked `blocked` instead of being retried.
   # 3 is deliberate: higher burns tokens on hopeless tasks, lower flags fixable work.
   maxAttempts: 3
   # Global safety stop on the number of generator/judge iterations in one `rockyctl run`.
@@ -51,12 +55,12 @@ git:
 
 shell:
   # Allowlist for the `run_command` tool. Anything not matching is refused.
-  # Patterns are matched token by token: "*" matches any one token, a trailing "*" matches
+  # Patterns are matched token by token: "*" matches any single token and a trailing "*" matches
   # everything after it. Commands run WITHOUT a shell, so pipes, redirects, `&&`, and shell
   # builtins are rejected outright — that is what keeps the allowlist meaningful.
   #
   # Keep this platform-neutral. Prefer cross-platform tools (git, npm, node, dotnet, python)
-  # over OS-specific ones (ls/cat/grep on Unix, dir/type/del on Windows). The model is given
+  # over OS-specific tools (ls/cat/grep on Unix, dir/type/del on Windows). The model is given
   # file tools (read_file, write_file, list_dir, search_files) so it never needs coreutils.
   # `rockyctl doctor` warns about entries that will not work on the current OS.
   allow:
@@ -76,5 +80,5 @@ files:
   prompt: .rockyctl/config/PROMPT.md
   # The task list the loop works through. See tasks.yaml for the format.
   tasks: .rockyctl/tasks.yaml
-  # Where per-iteration logs are written. Expected to grow into a `storage` section later.
+  # Where per-iteration logs are written. Expected to grow into a "storage" section later.
   logDir: .rockyctl/logs

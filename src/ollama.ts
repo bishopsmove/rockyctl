@@ -252,7 +252,7 @@ export class OllamaClient {
    * Non-streaming one-shot generation via /api/generate. Used for prompts that don't need
    * tool calling or streaming progress. Honours the `ollama.thinkEffort` setting: when it
    * is present the top-level `think` field is set to its value; when it is absent the
-   * field is omitted entirely so Ollama uses its own default.
+   * field is omitted entirely so Ollama uses its own default. Also supports temperature per-model.
    */
   async generate(
     model: string,
