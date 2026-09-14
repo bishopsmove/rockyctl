@@ -170,12 +170,12 @@ describe("tune command", () => {
     // Create 4 log files
     for (let i = 1; i <= 4; i++) {
       const logFile = resolve(logsDir, `run-2024-01-01T00-00-0${i}.jsonl`);
-      const event = {
+      const errorEvent = {
         ts: new Date().toISOString(),
         type: "error",
         message: "Ollama request timed out"
       };
-      writeFileSync(logFile, JSON.stringify(event) + "\n");
+      writeFileSync(logFile, JSON.stringify(errorEvent) + "\n");
     }
 
     const settingsBefore = loadSettings(cwd);
@@ -187,8 +187,35 @@ describe("tune command", () => {
     const newTimeout = (settingsAfter.providers.find(p => p.providerName === "ollama") as Provider).requestTimeoutMs;
 
     // If it only took the last 3, it should still update.
-    // If it took all 4, it would still update but maybe differently if we had cumulative logic.
-    // But with our current implementation, it just checks if it already added the change.
     assert.strictEqual(newTimeout, Math.ceil(oldTimeout * 1.5));
+  });
+
+  test("should update generator settings (temp and thinkEffort)", async () => {
+    const logsDir = resolve(cwd, ".rockyctl/logs");
+    const logFile = resolve(logsDir, "run-test.jsonl");
+    
+    // Create an event so that tune does something if there are no errors/timeouts
+    const event = {
+      ts: new Date().toISOString(),
+      type: "event",
+      tokens_per_second: 10
+    };
+    writeFileSync(logFile, JSON.stringify(event) + "\n");
+
+    const settingsBefore = loadSettings(cwd);
+    // Set some bad values
+    const badSettings = JSON.parse(JSON.stringify(settingsBefore));
+    badSettings.models.generator.temp = 2.0;
+    badSettings.models.generator.thinkEffort = "high";
+    badSettings.models.judge.thinkEffort = "low";
+
+    writeFileSync(resolve(cwd, ".rockyctl/config/rockyctl.yaml"), JSON.stringify(badSettings, null, 2));
+
+    await tune(cwd);
+
+    const settingsAfter = loadSettings(cwd);
+    assert.strictEqual(settingsAfter.models.generator.temp, 0.75);
+    assert.strictEqual(settingsAfter.models.generator.thinkEffort, "low");
+    assert.strictEqual(settingsAfter.models.judge.thinkEffort, false);
   });
 });

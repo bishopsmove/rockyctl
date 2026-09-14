@@ -182,6 +182,59 @@ export async function tune(cwd: string) {
     }
   }
 
+  // 3. Model tuning (thinkEffort and temp)
+  // Generator tuning
+  const generator = settings.models.generator;
+  if (generator.temp !== undefined && (generator.temp < 0.5 || generator.temp > 1)) {
+    const oldTemp = generator.temp;
+    const newTemp = 0.75;
+    const path = "models:generator:temp";
+    if (!changes.find(c => c.path === path)) {
+      changes.push({
+        path,
+        old: oldTemp,
+        new: newTemp,
+        reason: "Generator temperature should be between 0.5 and 1."
+      });
+      setNestedValue(settings, path, newTemp);
+    }
+  }
+
+  if (generator.thinkEffort !== undefined &&
+      generator.thinkEffort !== "low" &&
+      generator.thinkEffort !== "medium" &&
+      generator.thinkEffort !== true) {
+    const oldThink = generator.thinkEffort;
+    const newThink = "low";
+    const path = "models:generator:thinkEffort";
+    if (!changes.find(c => c.path === path)) {
+      changes.push({
+        path,
+        old: oldThink,
+        new: newThink,
+        reason: "Generator thinkEffort should be 'low' or 'medium' if the model supports it."
+      });
+      setNestedValue(settings, path, newThink);
+    }
+  }
+
+  // Judge tuning
+  const judge = settings.models.judge;
+  if (judge.thinkEffort !== undefined && judge.thinkEffort !== false) {
+    const oldThink = judge.thinkEffort;
+    const newThink = false;
+    const path = "models:judge:thinkEffort";
+    if (!changes.find(c => c.path === path)) {
+      changes.push({
+        path,
+        old: oldThink,
+        new: newThink,
+        reason: "Judge thinkEffort should be disabled (set to false)."
+      });
+      setNestedValue(settings, path, newThink);
+    }
+  }
+
   if (changes.length === 0) {
     ui.info("No settings need updating to improve performance based on the last 3 runs.");
     return;
