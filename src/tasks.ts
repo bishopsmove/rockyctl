@@ -40,7 +40,7 @@ export class TaskStore {
         status: (t.status as TaskStatus) ?? "pending",
         attempts: Number(t.attempts ?? 0),
         lastCritique: t.lastCritique,
-        dependencies: t.dependencies as string[] | undefined,
+        dependencies: Array.isArray(t.dependencies) ? (t.dependencies as string[]) : t.dependencies,
       };
     });
   }
@@ -66,7 +66,7 @@ export class TaskStore {
     return this.list().find((t) => t.id === id);
   }
 
-  update(id: string, patch: Partial<Pick<Task, "status" | "attempts" | "lastCritique">>): void {
+  update(id: string, patch: Partial<Pick<Task, "status" | "attempts" | "lastCritique" | "dependencies">>): void {
     const seq = this.doc.get("tasks");
     if (!isSeq(seq)) return;
     const idx = seq.items.findIndex((n) => isMap(n) && String(n.get("id")) === id);
