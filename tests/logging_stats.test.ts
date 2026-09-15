@@ -2,12 +2,13 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
-import { OllamaClient, type ChatResponse } from "../src/ollama.js";
+import { OllamaClient, } from "../src/ollama.js";
 import { SettingsSchema } from "../src/config.js";
 import { RunLog } from "../src/log.js";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { unlinkSync, existsSync, readFileSync } from "node:fs";
+import type { ChatResponse } from "../src/types.js";
 
 function settings(baseUrl: string, over: Partial<{ requestTimeoutMs: number }> = {}) {
   return SettingsSchema.parse({ providers: [{ providerName: "ollama", baseUrl, ...over }] }).providers.find(p => p.providerName === "ollama")!;

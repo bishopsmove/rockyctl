@@ -1,6 +1,6 @@
 import { appendFileSync, existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import type { TokenFn } from "./ollama.js";
+import type { TokenFn } from "./types.js";
 
 export class RunLog {
   private readonly file: string;
@@ -32,7 +32,6 @@ export class RunLog {
 }
 
 const tty = process.stdout.isTTY ?? false;
-
 export const ui = {
   info: (msg: string) => console.log(msg),
   step: (msg: string) => console.log(`\x1b[36m›\x1b[0m ${msg}`),

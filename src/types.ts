@@ -1,5 +1,7 @@
 import type { Provider, ThinkEffort } from "./config.js";
 
+export type { ThinkEffort };
+
 export interface ChatMessage {
   role: "system" | "user" | "assistant" | "tool";
   content: string;

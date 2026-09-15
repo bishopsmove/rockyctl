@@ -1,5 +1,5 @@
 import type { Settings } from "../config.js";
-import type { ToolDefinition } from "../ollama.js";
+import type { ToolDefinition } from "../types.js";
 import { listDir, readFile, searchFiles, writeFile } from "./fs.js";
 import { runCommand } from "./shell.js";
 
@@ -67,11 +67,8 @@ export const WRITE_TOOLS: ToolDefinition[] = [
       name: "write_file",
       description: "Create or overwrite a UTF-8 text file relative to the project root. Always write the COMPLETE file contents.",
       parameters: {
-        type: "object",
-        properties: {
-          path: { type: "string", description: "Relative file path" },
-          content: { type: "string", description: "Full file contents" },
-        },
+        path: { type: "string", description: "Relative file path" },
+        content: { type: "string", description: "Full file contents" },
         required: ["path", "content"],
       },
     },

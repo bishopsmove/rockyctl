@@ -2,12 +2,13 @@ import { readFileSync, existsSync } from "node:fs";
 import { resolve } from "node:path";
 import { execSync } from "node:child_process";
 import type { Provider, Settings } from "./config.js";
-import { OllamaClient, type ChatMessage, type RetryFn } from "./ollama.js";
+import { OllamaClient,} from "./ollama.js";
 import { TaskStore, type Task } from "./tasks.js";
 import { GENERATOR_TOOLS, JUDGE_TOOLS, executeTool } from "./tools/index.js";
 import { generatorSystemPrompt, generatorUserPrompt, judgeSystemPrompt, judgeUserPrompt } from "./prompts.js";
 import { RunLog, ui } from "./log.js";
 import { cleanUntracked, cleanupGitLock, commitAll, hasUntrackedFiles, isDirty, isGitRepo, workingDiff } from "./tools/git.js";
+import { ChatMessage, RetryFn } from "./types.js";
 
 export interface RunOptions {
   once?: boolean;

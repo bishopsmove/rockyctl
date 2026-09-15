@@ -1,70 +1,7 @@
 import { Agent, fetch as undiciFetch, type Response as UndiciResponse } from "undici";
 import type { Provider, Settings, ThinkEffort } from "./config.js";
-
-export interface ChatMessage {
-  role: "system" | "user" | "assistant" | "tool";
-  content: string;
-  tool_calls?: ToolCall[];
-  tool_name?: string;
-}
-
-export interface ToolCall {
-  function: { name: string; arguments: Record<string, unknown> };
-}
-
-export interface ToolDefinition {
-  type: "function";
-  function: {
-    name: string;
-    description: string;
-    parameters: Record<string, unknown>;
-  };
-}
-
-export interface ChatResponse {
-  message: ChatMessage;
-  done: boolean;
-  done_reason?: string;
-  prompt_eval_count?: number;
-  prompt_eval_duration?: number;
-  eval_count?: number;
-  eval_duration?: number;
-  total_duration?: number;
-}
-
-export interface GenerateResponse {
-  response: string;
-  done: boolean;
-  done_reason?: string;
-  prompt_eval_count?: number;
-  prompt_eval_duration?: number;
-  eval_count?: number;
-  eval_duration?: number;
-  total_duration?: number;
-  error?: string;
-}
-
-export interface ModelInfo {
-  name: string;
-  size: number;
-}
-
-/** From /api/ps — what is currently loaded and where. */
-export interface LoadedModel {
-  name: string;
-  size: number;
-  size_vram: number;
-  expires_at?: string;
-  context_length?: number;
-}
-
-export type ProgressFn = (message: string) => void;
-
-/** Called as tokens stream in; `tokens` is the running count for this response. */
-export type TokenFn = (info: { tokens: number; elapsedMs: number; phase: "prompt" | "generate" }) => void;
-
-/** Called before each retry sleep, once a chat() attempt has failed with a transient error. */
-export type RetryFn = (info: { attempt: number; maxAttempts: number; delayMs: number; error: string }) => void;
+import type { ChatMessage, ToolCall, ToolDefinition, LoadedModel, GenerateResponse, ChatResponse, ModelInfo, TokenFn, RetryFn, ProgressFn, HostProvider } from "./types.js";
+import { sleep, ndjsonLines } from "./utils.js";
 
 export class OllamaError extends Error {
   constructor(message: string, public status?: number) {
@@ -76,34 +13,6 @@ export class OllamaError extends Error {
 /**
  * Abstraction layer for model utilization.
  */
-export interface HostProvider {
-  waitUntilReady(models: string[], progress: ProgressFn): Promise<void>;
-  chat(
-    model: string,
-    messages: ChatMessage[],
-    opts: {
-      tools?: ToolDefinition[];
-      format?: "json" | Record<string, unknown>;
-      temperature?: number;
-      thinkEffort?: ThinkEffort;
-      onToken?: TokenFn;
-      onRetry?: RetryFn;
-    },
-  ): Promise<ChatResponse>;
-  generate(
-    model: string,
-    prompt: string,
-    opts: {
-      system?: string;
-      format?: "json" | Record<string, unknown>;
-      temperature?: number;
-      thinkEffort?: ThinkEffort;
-    },
-  ): Promise<GenerateResponse>;
-  loadedModels(timeoutMs?: number): Promise<LoadedModel[]>;
-  supportsTools(model: string, timeoutMs: number): Promise<boolean>;
-}
-
 export class OllamaClient implements HostProvider {
   private readonly provider: Provider;
   private readonly agent: Agent;
@@ -170,14 +79,14 @@ export class OllamaClient implements HostProvider {
   async chat(
     model: string,
     messages: ChatMessage[],
-    opts: {
+    opts?: {
       tools?: ToolDefinition[];
       format?: "json" | Record<string, unknown>;
       temperature?: number;
       thinkEffort?: ThinkEffort;
       onToken?: TokenFn;
       onRetry?: RetryFn;
-    } = {},
+    },
   ): Promise<ChatResponse> {
     const maxAttempts = 1 + this.provider.maxRetries;
     for (let attempt = 1; ; attempt++) {
@@ -186,7 +95,7 @@ export class OllamaClient implements HostProvider {
       } catch (err) {
         if (attempt >= maxAttempts || !isRetryableChatError(err)) throw err;
         const delayMs = this.provider.retryBackoffMs * 2 ** (attempt - 1);
-        opts.onRetry?.({ attempt, maxAttempts, delayMs, error: (err as Error).message });
+        opts?.onRetry?.({ attempt, maxAttempts, delayMs, error: (err as Error).message });
         await sleep(delayMs);
       }
     }
@@ -195,7 +104,7 @@ export class OllamaClient implements HostProvider {
   private async chatOnce(
     model: string,
     messages: ChatMessage[],
-    opts: {
+    opts?: {
       tools?: ToolDefinition[];
       format?: "json" | Record<string, unknown>;
       temperature?: number;
@@ -211,14 +120,14 @@ export class OllamaClient implements HostProvider {
       keep_alive: this.provider.keepAlive,
       options: {
         num_ctx: this.provider.numCtx,
-        ...(opts.temperature !== undefined ? { temperature: opts.temperature } : {}),
+        ...(opts?.temperature !== undefined ? { temperature: opts.temperature } : {}),
       },
     };
-    if (opts.tools?.length) body.tools = opts.tools;
-    if (opts.format) body.format = opts.format;
+    if (opts?.tools?.length) body.tools = opts.tools;
+    if (opts?.format) body.format = opts.format;
     // Only send `think` when the user opted in via `models{0}.thinkEffort`; when that
     // setting is absent the field is omitted entirely so Ollama uses its own default.
-    if (opts.thinkEffort !== undefined) body.think = opts.thinkEffort;
+    if (opts?.thinkEffort !== undefined) body.think = opts.thinkEffort;
 
     const started = Date.now();
     const controller = new AbortController();
@@ -236,7 +145,7 @@ export class OllamaClient implements HostProvider {
       let final: Partial<ChatResponse> = {};
       let tokens = 0;
       let sawFirst = false;
-      opts.onToken?.({ tokens: 0, elapsedMs: 0, phase: "prompt" });
+      opts?.onToken?.({ tokens: 0, elapsedMs: 0, phase: "prompt" });
 
       for await (const line of ndjsonLines(res.body as unknown as ReadableStream<Uint8Array>, controller.signal)) {
         let chunk: Partial<ChatResponse> & { error?: string };
@@ -257,7 +166,7 @@ export class OllamaClient implements HostProvider {
             message.tool_calls = [...(message.tool_calls ?? []), ...m.tool_calls];
             tokens++;
           }
-          opts.onToken?.({ tokens, elapsedMs: Date.now() - started, phase: "generate" });
+          opts?.onToken?.({ tokens, elapsedMs: Date.now() - started, phase: "generate" });
         }
         if (chunk.done) final = chunk;
       }
@@ -276,11 +185,10 @@ export class OllamaClient implements HostProvider {
     }
   }
 
-  /**
-   * Non-streaming one-shot generation via /api/generate. Used for prompts that don't need
+  /** Non-streaming one-shot generation via /api/generate. Used for prompts that don't need
    * tool calling or streaming progress. Honours the `thinkEffort` setting: when it
-   * is present the top-level `think` field is set to its value; when it is absent the
-   * field is omitted entirely so Ollama uses its own default. Also supports temperature per-model.
+   * is present the top-level `think` field is set to its value; when it is absent
+   * the field is omitted entirely so Ollama uses its own default. Also supports temperature per-model.
    */
   async generate(
     model: string,
@@ -433,8 +341,6 @@ export class OllamaClient implements HostProvider {
     timeoutMs: number,
     controller = new AbortController(),
   ): Promise<UndiciResponse> {
-    // For non-streaming calls the timer covers the whole request. For streaming calls the
-    // caller owns the controller.
     const ownTimer = setTimeout(() => controller.abort(), timeoutMs);
     try {
       const res = await undiciFetch(this.provider.baseUrl + path, {
@@ -456,10 +362,10 @@ export class OllamaClient implements HostProvider {
       }
       return res;
     } catch (err) {
-      if (err instanceof OllamaError) throw err;
       if (controller.signal.aborted) {
         throw new OllamaError(`${init.method} ${path} timed out after ${timeoutMs}ms`);
       }
+      if (err instanceof OllamaError) throw err;
       throw new OllamaError(`${init.method} ${path} failed: ${describeError(err)}`);
     } finally {
       clearTimeout(ownTimer);
@@ -467,30 +373,30 @@ export class OllamaClient implements HostProvider {
   }
 }
 
-/** Splits a byte stream into newline-delimited JSON lines. */
-async function* ndjsonLines(body: ReadableStream<Uint8Array>, signal: AbortSignal): AsyncGenerator<string> {
-  const reader = body.getReader();
-  const decoder = new TextDecoder();
-  let buffer = "";
-  try {
-    for (;;) {
-      if (signal.aborted) throw new Error("aborted");
-      const { value, done } = await reader.read();
-      if (done) break;
-      buffer += decoder.decode(value, { stream: true });
-      let idx: number;
-      while ((idx = buffer.indexOf("\n")) >= 0) {
-        const line = buffer.slice(0, idx).trim();
-        buffer = buffer.slice(idx + 1);
-        if (line) yield line;
-      }
-    }
-    const rest = buffer.trim();
-    if (rest) yield rest;
-  } finally {
-    reader.releaseLock();
-  }
-}
+// /** Splits a byte stream into newline-deliminated JSON lines. */
+// async function* ndjsonLines(body: ReadableStream<Uint8Array>, signal: AbortSignal): AsyncGenerator<string> {
+//   const reader = body.getReader();
+//   const decoder = new TextDecoder();
+//   let buffer = "";
+//   try {
+//     for (;;) {
+//       if (signal.aborted) throw new Error("aborted");
+//       const { value, done } = await reader.read();
+//       if (done) break;
+//       buffer += decoder.decode(value, { stream: true });
+//       let idx: number;
+//       while ((idx = buffer.indexOf("\n")) >= 0) {
+//         const line = buffer.slice(0, idx).trim();
+//         buffer = buffer.slice(idx + 1);
+//         if (line) yield line;
+//       }
+//     }
+//     const rest = buffer.trim();
+//     if (rest) yield rest;
+//   } finally {
+//     reader.releaseLock();
+//   }
+// }
 
 const RETRYABLE_PATTERN =
   /ECONNRESET|ECONNREFUSED|ETIMEDOUT|EPIPE|ECONNABORTED|EAI_AGAIN|ENOTFOUND|UND_ERR_SOCKET|socket hang up|other side closed|ended without a final chunk/i;
@@ -502,19 +408,19 @@ function isRetryableChatError(err: unknown): boolean {
 }
 
 export function describeError(err: unknown): string {
-  if (!(err instanceof Error)) return String(err);
-  const parts = [err.message];
-  let cause = (err as { cause?: unknown }).cause;
-  let depth = 0;
-  while (cause instanceof Error && depth < 4) {
-    const code = (cause as { code?: unknown }).code;
-    parts.push(`${code ? `[${code}] ` : ""}${cause.message}`);
-    cause = (cause as { cause?: unknown }).cause;
-    depth++;
-  }
-  return parts.join(" <- ");
+    if (!(err instanceof Error)) return String(err);
+    const parts: string[] = [err.message];
+    let current: any = err.cause;
+    let depth = 0;
+    while (current && typeof current === 'object' && depth < 4) {
+        if (current.code) parts.push(`[${current.code}] ${current.message}`);
+        else parts.push(current.message);
+        current = current.cause;
+        depth++;
+    }
+    return parts.join(" <- ");
 }
 
-export function sleep(ms: number): Promise<void> {
-  return new Promise((r) => setTimeout(r, ms));
-}
+// export function sleep(ms: number): Promise<void> {
+//   return new Promise((r) => setTimeout(r, ms));
+// }
