@@ -30,19 +30,28 @@ export class TaskStore {
 
   list(): Task[] {
     const raw = this.doc.toJS() as { tasks?: Partial<Task>[] };
-    return (raw.tasks ?? []).map((t, i) => {
+    const tasks: Task[] = [];
+    const seenIds = new Set<string>();
+
+    for (const [i, t] of (raw.tasks ?? []).entries()) {
       if (!t.id) throw new Error(`Task at index ${i} has no id.`);
-      return {
-        id: String(t.id),
-        title: t.title ?? String(t.id),
+      const id = String(t.id);
+      if (seenIds.has(id)) {
+        throw new Error(`Duplicate task id found: ${id}`);
+      }
+      seenIds.add(id);
+      tasks.push({
+        id,
+        title: t.title ?? id,
         description: t.description ?? "",
         criteria: t.criteria ?? [],
         status: (t.status as TaskStatus) ?? "pending",
         attempts: Number(t.attempts ?? 0),
         lastCritique: t.lastCritique,
         dependencies: Array.isArray(t.dependencies) ? (t.dependencies as string[]) : t.dependencies,
-      };
-    });
+      });
+    }
+    return tasks;
   }
 
   next(): Task | undefined {
