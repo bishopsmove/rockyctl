@@ -2,7 +2,8 @@ import { readFileSync, existsSync } from "node:fs";
 import { resolve } from "node:path";
 import { execSync } from "node:child_process";
 import type { Provider, Settings } from "./config.js";
-import { OllamaClient,} from "./ollama.js";
+import { clientFactory } from "./clients.js";
+import type { HostProvider } from "./types.js";
 import { TaskStore, type Task } from "./tasks.js";
 import { GENERATOR_TOOLS, JUDGE_TOOLS, executeTool } from "./tools/index.js";
 import { generatorSystemPrompt, generatorUserPrompt, judgeSystemPrompt, judgeUserPrompt } from "./prompts.js";
@@ -27,7 +28,7 @@ export async function runLoop(settings: Settings, cwd: string, opts: RunOptions 
   let store: TaskStore;
 
   try {
-    const client = new OllamaClient(settings.providers.find(p => p.providerName === "ollama") as Provider);
+    const client = clientFactory.createClient(settings.providers[0]);
     store = new TaskStore(resolve(cwd, settings.files.tasks));
     const promptPath = resolve(cwd, settings.files.prompt);
     const projectPrompt = existsSync(promptPath) ? readFileSync(promptPath, "utf8") : "";
@@ -60,7 +61,7 @@ export async function runLoop(settings: Settings, cwd: string, opts: RunOptions 
 }
 
 async function runIterations(
-  client: OllamaClient,
+  client: HostProvider,
   settings: Settings,
   cwd: string,
   store: TaskStore,
@@ -88,7 +89,7 @@ async function runIterations(
       continue;
     }
     if (depStatus === 'pending') {
-      // This should be avoided by store.next() but if it happens, it's not our fault
+      // This should be avoided by store.next() but if it happens it's not our fault
       ui.dim(`Task ${task.id} is waiting on dependencies.`);
       continue;
     }
@@ -164,7 +165,7 @@ async function runIterations(
         ui.fail(`Task ${task.id} marked blocked after ${attempts} attempts. Uncommitted changes left in the working tree for inspection.`);
         log.event("task.blocked", { task: task.id });
         if (settings.git.checkDirtyTree) {
-          ui.warn("Working tree is now dirty; resolve it before the next run (or use `git checkout . && git clean -fd` to discard).");
+          ui.warn("Working tree is now dirty; resolve it before the next run (or use `git checkout . && git clean -fd` to discard the changes).");
           break;
         }
       }
@@ -182,7 +183,7 @@ async function runIterations(
 }
 
 async function runGenerator(
-  client: OllamaClient,
+  client: HostProvider,
   settings: Settings,
   cwd: string,
   task: Task,
@@ -282,7 +283,7 @@ async function runGenerator(
 }
 
 async function runJudge(
-  client: OllamaClient,
+  client: HostProvider,
   settings: Settings,
   cwd: string,
   task: Task,
@@ -369,7 +370,7 @@ async function runJudge(
       log.event("verdict", { task: task.id, ...parsed });
       return parsed;
     }
-    // Model chatted instead of returning JSON: ask once more with JSON mode forced.
+    // Model chatted instead of returning JSON mode: ask once more with JSON mode forced.
     messages.push({ role: "user", content: "Return ONLY the JSON verdict object now." });
     const retry = await client.chat(settings.models.judge.name, messages, {
       format: "json",

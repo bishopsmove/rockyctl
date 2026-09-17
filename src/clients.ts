@@ -16,3 +16,8 @@ export function createClient(provider: Provider): HostProvider {
       throw new Error(`Unknown provider: ${provider.providerName}`);
   }
 }
+
+// This will allow us to mock it in tests
+export const clientFactory = {
+  createClient,
+};
