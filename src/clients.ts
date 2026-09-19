@@ -1,6 +1,7 @@
 import { OllamaClient } from "./ollama.js";
 import { LlamaCppClient } from "./llamacpp.js";
 import { LMStudioClient } from "./lmstudio.js";
+import { UnslothClient } from "./unsloth.js";
 import type { Provider } from "./config.js";
 import type { HostProvider } from "./types.js";
 
@@ -12,6 +13,8 @@ export function createClient(provider: Provider): HostProvider {
       return new LlamaCppClient(provider);
     case "lm-studio":
       return new LMStudioClient(provider);
+    case "unsloth":
+      return new UnslothClient(provider);
     default:
       throw new Error(`Unknown provider: ${provider.providerName}`);
   }
