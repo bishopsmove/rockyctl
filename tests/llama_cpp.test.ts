@@ -2,7 +2,7 @@ import { createServer } from "node:http";
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { AddressInfo } from "node:net";
-import { LlamaCppClient } from "../src/llamacpp.js";
+import { LlamaCppClient } from "../src/clients/llamacpp.js";
 import { SettingsSchema } from "../src/config.js";
 import type { Provider } from "../src/config.js";
 
@@ -15,7 +15,7 @@ test("chat accumulates streamed content", async () => {
     res.writeHead(200, { "content-type": "application/x-ndjson" });
     // res.write(JSON.stringify({ choices: [{ delta: { content: "Hello" } }, { delta: { content: " world" } }], finish_reason: "stop" }) + "\n");
     res.write(JSON.stringify({ choices: [{ delta: { content: "Hello" } }] }) + "\n");
-    res.write(JSON.stringify({ choices: [{ delta: { content: " world" } }]  }) + "\n");
+    res.write(JSON.stringify({ choices: [{ delta: { content: " world" } }] }) + "\n");
     res.end(JSON.stringify({ choices:[{finish_reason: "stop" }]}));
   });
   await new Promise<void>((r) => server.listen(0, r));

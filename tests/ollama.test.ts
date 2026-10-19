@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
-import { OllamaClient, describeError } from "../src/ollama.js";
+import { OllamaClient, describeError } from "../src/clients/ollama.js";
 import { Provider, SettingsSchema } from "../src/config.js";
 
 function settings(baseUrl: string, over: Partial<{ requestTimeoutMs: number; maxRetries: number; retryBackoffMs: number; thinkEffort?: "low" | "medium" | "high" | boolean }> = {}) {

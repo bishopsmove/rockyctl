@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { clientFactory } from "../src/clients.js";
+import { clientFactory } from "../src/clients/clients.js";
 import { runLoop } from "../src/loop.js";
 import { SettingsSchema } from "../src/config.js";
 import { writeFileSync, mkdtempSync } from "node:fs";
@@ -55,7 +55,7 @@ test("runLoop calls createClient with the first provider", async () => {
 
     await runLoop(safeSettings, tempDir);
   } catch (e) {
-    // We expect it might fail if it tries to call some command that's not there, but createClient should have been called.
+    // We expect it might fail if it tries to call a command that's not there, but createClient should have been called.
   } finally {
     // Clean up the mock
     clientFactory.createClient = originalCreateClient;

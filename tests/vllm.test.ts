@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
-import { VLLMClient } from "../src/vllm.js";
+import { VLLMClient } from "../src/clients/vllm.js";
 import { SettingsSchema } from "../src/config.js";
 import type { Provider } from "../src/config.js";
 

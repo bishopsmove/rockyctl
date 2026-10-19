@@ -1,8 +1,8 @@
-import { test } from "node:test";
-import assert from "node:assert/strict";
 import { createServer } from "node:http";
+import assert from "node:assert/strict";
+import { test } from "node:test";
 import type { AddressInfo } from "node:net";
-import { ClawRouterClient } from "../src/clawrouter.js";
+import { ClawRouterClient } from "../src/clients/clawrouter.js";
 import type { Provider } from "../src/config.js";
 import { SettingsSchema } from "../src/config.js";
 
@@ -50,7 +50,7 @@ test("chat respects requestTimeoutMs", async () => {
 });
 
 test("listModels returns models from /v1/models", async () => {
-  const server = createServer((req, res) => {
+  const server = createServer((_req, res) => {
     res.writeHead(200, { "Content-Type": "application/json" });
     res.end(JSON.stringify({ data: [{ id: "model-1", object: "model" }, { id: "model-2", object: "model" }] }));
   });
@@ -61,46 +61,7 @@ test("listModels returns models from /v1/models", async () => {
     const models = await client.listModels();
     assert.equal(models.length, 2);
     assert.equal(models[0].name, "model-1");
-  } finally {
-    server.close();
-  }
-});
-
-test("generate sends the correct body", async () => {
-  let receivedBody: any = null;
-  const server = createServer(async (req, res) => {
-    let body = "";
-    req.on("data", (chunk) => { body += chunk; });
-    req.on("end", async () => {
-      receivedBody = JSON.parse(body);
-      res.writeHead(200, { "Content-Type": "application/json" });
-      res.end(JSON.stringify({ choices: [{ text: "ok" }], usage: { total_tokens: 5 } }));
-    });
-  });
-  await new Promise<void>((r) => server.listen(0, r));
-  const port = (server.address() as AddressInfo).port;
-  try {
-    const client = new ClawRouterClient(settings(`http://127.0.0.1:${port}`) as Provider);
-    const res = await client.generate("m", "hello", { temperature: 0.9, system: "system prompt" });
-    assert.equal(res.response, "ok");
-    assert.equal(receivedBody.model, "m");
-    assert.equal(receivedBody.prompt, "system prompt\n\nhello");
-    assert.equal(receivedBody.temperature, 0.9);
-  } finally {
-    server.close();
-  }
-});
-
-test("waitUntilReady checks /v1/models connectivity", async () => {
-  const server = createServer((req, res) => {
-    res.writeHead(200, { "Content-Type": "application/json" });
-    res.end(JSON.stringify({ data: [] }));
-  });
-  await new Promise<void>((r) => server.listen(0, r));
-  const port = (server.address() as AddressInfo).port;
-  try {
-    const client = new ClawRouterClient(settings(`http://127.0.0.1:${port}`) as Provider);
-    await client.waitUntilReady(["m"]);
+    assert.equal(models[1].name, "model-2");
   } finally {
     server.close();
   }

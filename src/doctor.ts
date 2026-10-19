@@ -1,10 +1,11 @@
 import { existsSync } from "node:fs";
 import { resolve } from "node:path";
 import type { Settings } from "./config.js";
-import { OllamaClient } from "./ollama.js";
+import { OllamaClient } from "./clients/ollama.js";
 import { platformWarnings } from "./tools/shell.js";
 import { isGitRepo, isDirty } from "./tools/git.js";
 import { ui } from "./log.js";
+
 
 /** Exercises every external dependency and reports; exits non-zero on hard failures. */
 export async function doctor(settings: Settings, cwd: string): Promise<boolean> {
@@ -54,8 +55,8 @@ export async function doctor(settings: Settings, cwd: string): Promise<boolean> 
     const loaded = await client.loadedModels();
     const gb = (n: number) => (n / 1024 ** 3).toFixed(1) + " GB";
     for (const modelCfg of Object.values(settings.models)) {
-      const modelName = typeof modelCfg === 'string' ? modelCfg : modelCfg.name;
-      const m = loaded.find((l) => l.name === modelName || l.name === `${modelName}:latest`);
+      const modelName = typeof modelCfg === 'object' ? modelCfg.name : modelCfg;
+      const m = loaded.find((l: { name: string; }) => l.name === modelName || l.name === `${modelName}:latest`);
       if (!m) {
         ui.warn(`${modelName} is not resident after warm-up (evicted already? check keepAlive / other clients).`);
         continue;
@@ -66,7 +67,7 @@ export async function doctor(settings: Settings, cwd: string): Promise<boolean> 
       else if (pct === 0) ui.warn(`${modelName}: ${gb(m.size)} loaded entirely on CPU${ctx} — expect very slow generation.`);
       else ui.warn(`${modelName}: ${gb(m.size)} loaded, only ${pct}% in GPU memory${ctx} — partial CPU offload, expect slow generation.`);
     }
-    const total = loaded.reduce((a, m) => a + m.size, 0);
+    const total = loaded.reduce((a: any, m: { size: any; }) => a + m.size, 0);
     if (loaded.length > 1) ui.info(`  ${loaded.length} models resident, ${gb(total)} total. If they don't both fit, Ollama will swap them every iteration.`);
   } catch (err) {
     ui.warn(`Could not query /api/ps: ${err instanceof Error ? err.message : String(err)}`);

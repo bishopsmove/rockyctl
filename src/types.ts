@@ -38,8 +38,6 @@ export interface GenerateResponse {
   done: boolean;
   done_reason?: string;
   prompt_eval_count?: number;
-  prompt_eval_duration?: number;
-  eval_count?: number;
   eval_duration?: number;
   total_duration?: number;
   error?: string;
@@ -80,6 +78,7 @@ export interface HostProvider {
       format?: "json" | Record<string, unknown>;
       temperature?: number;
       thinkEffort?: ThinkEffort;
+      jevMode?: boolean;
       onToken?: TokenFn;
       onRetry?: RetryFn;
     },

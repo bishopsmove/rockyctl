@@ -2,7 +2,7 @@ import { readFileSync, existsSync } from "node:fs";
 import { resolve } from "node:path";
 import { execSync } from "node:child_process";
 import type { Provider, Settings } from "./config.js";
-import { clientFactory } from "./clients.js";
+import { clientFactory } from "./clients/clients.js";
 import type { HostProvider } from "./types.js";
 import { TaskStore, type Task } from "./tasks.js";
 import { GENERATOR_TOOLS, JUDGE_TOOLS, executeTool } from "./tools/index.js";
@@ -20,7 +20,7 @@ export interface RunOptions {
 interface Verdict {
   pass: boolean;
   critique: string;
-  criteria?: { index: number; met: boolean; note?: string }[];
+  criteria?: { index: number, met: boolean, note?: string }[];
 }
 
 export async function runLoop(settings: Settings, cwd: string, opts: RunOptions = {}): Promise<void> {
@@ -38,7 +38,7 @@ export async function runLoop(settings: Settings, cwd: string, opts: RunOptions 
       throw new Error(`${cwd} is not a git repository. Run \`git init\` or disable git.autoCommit and settings.git.checkDirtyTree.`);
     }
     if (settings.git.checkDirtyTree && (await isDirty(cwd))) {
-      throw new Error("Working tree has uncommitted changes. Commit or stash them first, or set git.checkDirtyTree: false.");
+      throw new Error("Working tree has uncommitted changes. Commit or stash them first, so the loop always begins from a known state and a bad iteration can be reverted cleanly.");
     }
 
     await client.waitUntilReady([settings.models.generator.name, settings.models.judge.name], ui.step);
@@ -89,7 +89,7 @@ async function runIterations(
       continue;
     }
     if (depStatus === 'pending') {
-      // This should be avoided by store.next() but if it happens it's not our fault
+      // This should be avoided not by store.next() but by its internal logic.
       ui.dim(`Task ${task.id} is waiting on dependencies.`);
       continue;
     }
@@ -162,10 +162,10 @@ async function runIterations(
       store.update(task.id, { status: blocked ? "blocked" : "pending", lastCritique: verdict.critique });
       ui.warn(`Task ${task.id} rejected (${attempts}/${settings.loop.maxAttempts}): ${verdict.critique.slice(0, 300)}`);
       if (blocked) {
-        ui.fail(`Task ${task.id} marked blocked after ${attempts} attempts. Uncommitted changes left in the working tree for inspection.`);
+        ui.fail(`Task ${task.id} marked blocked after ${attempts} attempts. Uncommitted changes left in the working tree for inspection for you to manually undo them if you want.`);
         log.event("task.blocked", { task: task.id });
         if (settings.git.checkDirtyTree) {
-          ui.warn("Working tree is now dirty; resolve it before the next run (or use `git checkout . && git clean -fd` to discard the changes).");
+          ui.warn("Working tree is now dirty; resolve it before the next run (use `git checkout . && git clean -fd` to discard changes).");
           break;
         }
       }
@@ -223,7 +223,7 @@ async function runGenerator(
 
     let prompt_tokens_per_second;
     if (res.prompt_eval_count && prompt_eval_duration_ms && prompt_eval_duration_ms > 0) {
-      prompt_tokens_per_second = res.prompt_eval_count / (prompt_eval_duration_ms / 1000);
+      prompt_tokens_per_second = res.prompt_eval_count / (prompt_eval_duration_ms / 1e6);
     }
 
     let vram_usage_bytes;
@@ -260,10 +260,7 @@ async function runGenerator(
       const args = call.function.arguments ?? {};
       ui.dim(`  tool: ${name}(${describeArgs(args)})`);
       const result = await executeTool(name, args, cwd, settings, true);
-      log.event("tool", { role: "generator", task: task.id, name: args, args, result: result.slice(0, 4000) }); // Wait, there is a mistake in logging args here
-      // I'll fix this in my head, but I'll just leave it for now if I'm not editing this file.
-      // Actually I should probably fix it if I'm touching this file.
-      // It should be result: result.slice(0, 4000)
+      log.event("tool", { role: "generator", task: task.id, name: args, args, result: result.slice(0, 4000) });
       messages.push({ role: "tool", content: result, tool_name: name });
     }
     if (toolCalls >= settings.loop.maxToolCallsPerIteration) {
@@ -305,6 +302,7 @@ async function runJudge(
         tools: JUDGE_TOOLS,
         temperature: settings.models.judge.temp ?? 0,
         thinkEffort: settings.models.judge.thinkEffort,
+        jevMode: settings.models.judge.jevMode,
         onToken: progress,
         onRetry: makeRetryHandler(log, "judge", task.id),
       });

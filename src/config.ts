@@ -18,7 +18,7 @@ const ProviderSchema = z.object({
   keepAlive: z.string().default("30m"),
   // Context window requested for generation. Generator needs room for tools + file contents.
   numCtx: z.number().int().positive().default(32_768),
-  // Retries for a chat() call after a transient network failure (connection reset/refused,
+  // Retries for a chat() call after a transient network failure (connection reset, refused,
   // 5xx). Does not apply to a deliberate requestTimeoutMs abort or an HTTP 4xx.
   maxRetries: z.number().int().nonnegative().default(2),
   // Base delay (ms) before the first retry; doubles each subsequent attempt.
@@ -42,6 +42,7 @@ const ModelConfigSchema = z.object({
   name: z.string(),
   temp: z.number().optional(),
   thinkEffort: z.union([z.enum(["low", "medium", "high"]), z.boolean()]).optional(),
+  jevMode: z.boolean().optional().default(false),
 });
 
 const ModelsSchema = z.object({
@@ -73,7 +74,13 @@ const GitSchema = z.object({
 
 const ShellSchema = z.object({
   // Allowlist patterns. Each pattern is matched token-by-token against the command;
-  // "*" matches any single token and a trailing "*" matches the rest of the command.
+  // "*" matches any single token and a trailing "*" matches everything after it.
+  // Commands run WITHOUT a shell, so pipes, redirects, `&&`, and shell
+  // builtins are rejected outright — this is what keeps the allowlist meaningful.
+  //
+  // Keep this platform-neutral. Prefer cross-platform tools (git, npm, npx, node, python)
+  // over OS-specific tools (ls/cat/grep/dir/type/del/type on Windows). The model is given
+  // file tools (read_file, write_file, list_dir, search_files) so it never needs coreutils.
   allow: z.array(z.string()).default(["git *", "npm *", "npx *", "node *"]),
   timeoutMs: z.number().int().positive().default(300_000),
   maxOutputChars: z.number().int().positive().default(20_000),

@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
-import { OllamaClient, } from "../src/ollama.js";
+import { OllamaClient, } from "../src/clients/ollama.js";
 import { SettingsSchema } from "../src/config.js";
 import { RunLog } from "../src/log.js";
 import { tmpdir } from "node:os";

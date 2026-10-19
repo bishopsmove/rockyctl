@@ -1,14 +1,15 @@
 // Minimal stand-in for Ollama used to smoke-test `rockyctl doctor` and `run` without GPUs.
 // Generator: writes hello.txt then summarizes. Judge: reads it, returns a passing verdict.
-// Honors `stream: true` by emitting NDJSON chunks, like the real server.
 //   PORT=11499 node tests/fake-ollama.mjs
 //   SLOW_MS=400000 ... simulates a generation that takes longer than undici's 300s default.
+//   JEV_MODE=1 ... simulates the /v1/systemone endpoint
+// RESET_ONCE=1 drops the connection mid-stream on the first generator turn, then behaves normally after — used to exercise rockyctl's chat() retry path against a real socket reset.
 import { createServer } from "node:http";
 
 const port = Number(process.env.PORT ?? 11499);
 const slowMs = Number(process.env.SLOW_MS ?? 0);
-// RESET_ONCE=1 drops the connection mid-stream on the first generator turn, then behaves
-// normally after — used to exercise rockyctl's chat() retry path against a real socket reset.
+const jevMode = process.env.JEV_MODE === "1";
+// RESET_ONCE=1 drops the connection mid-stream on the first generator turn, then behaves normally after — used to exercise rockyctl's chat() retry path against a real socket reset.
 const resetOnce = process.env.RESET_ONCE === "1";
 let didReset = false;
 let judgeTurn = 0;
@@ -54,6 +55,14 @@ createServer(async (req, res) => {
         { name: "judge:latest", size: sizes.judge, size_vram: sizes.judge * 0.6, context_length: 32768 },
       ],
     });
+  
+  if (req.url === "/v1/systemone") {
+    if (jevMode) {
+        return reply({ model: body.model, message: { role: "assistant", content: "jev-decision" }, done: true });
+    }
+    return json({ error: "not found" }, 404);
+  }
+
   if (req.url !== "/api/chat") return json({ error: "not found" }, 404);
 
   if (body.messages?.length === 0) {
@@ -77,4 +86,4 @@ createServer(async (req, res) => {
   if (last.role === "user" && judgeTurn === 1)
     return reply({ role: "assistant", content: "", tool_calls: [{ function: { name: "read_file", arguments: { path: "hello.txt" } } }] });
   return reply({ role: "assistant", content: JSON.stringify({ pass: true, critique: "hello.txt exists with expected content", criteria: [{ index: 1, met: true }] }) });
-}).listen(port, () => console.log(`fake ollama on ${port}${slowMs ? ` (slow: ${slowMs}ms before first token)` : ""}`));
+}).listen(port, () => console.log(`fake ollama on ${port}${slowMs ? ` (slow: ${slowMs}ms before first token)` : "")}`));

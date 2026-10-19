@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
-import { UnslothClient } from "../src/unsloth.js";
+import { UnslothClient } from "../src/clients/unsloth.js";
 import { Provider, SettingsSchema } from "../src/config.js";
 
 function settings(baseUrl: string, over: Partial<{ requestTimeoutMs: number; maxRetries: number; retryBackoffMs: number; thinkEffort?: "low" | "medium" | "high" | boolean }> = {}) {
