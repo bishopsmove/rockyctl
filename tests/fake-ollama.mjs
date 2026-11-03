@@ -86,4 +86,4 @@ createServer(async (req, res) => {
   if (last.role === "user" && judgeTurn === 1)
     return reply({ role: "assistant", content: "", tool_calls: [{ function: { name: "read_file", arguments: { path: "hello.txt" } } }] });
   return reply({ role: "assistant", content: JSON.stringify({ pass: true, critique: "hello.txt exists with expected content", criteria: [{ index: 1, met: true }] }) });
-}).listen(port, () => console.log(`fake ollama on ${port}${slowMs ? ` (slow: ${slowMs}ms before first token)` : "")}`));
+}).listen(port, () => console.log(`fake ollama on ${port}${slowMs ? ` (slow: ${slowMs}ms before first token)` : ""}`));

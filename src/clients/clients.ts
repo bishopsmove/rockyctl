@@ -2,6 +2,8 @@ import { OllamaClient } from "./ollama.js";
 import { LlamaCppClient } from "./llamacpp.js";
 import { LMStudioClient } from "./lmstudio.js";
 import { UnslothClient } from "./unsloth.js";
+import { VLLMClient } from "./vllm.js";
+import { ClawRouterClient } from "./clawrouter.js";
 import type { Provider } from "../config.js";
 import type { HostProvider } from "../types.js";
 
@@ -15,6 +17,10 @@ export function createClient(provider: Provider): HostProvider {
       return new LMStudioClient(provider);
     case "unsloth":
       return new UnslothClient(provider);
+    case "vllm":
+      return new VLLMClient(provider);
+    case "clawrouter":
+      return new ClawRouterClient(provider);
     default:
       throw new Error(`Unknown provider: ${provider.providerName}`);
   }
