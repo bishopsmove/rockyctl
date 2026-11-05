@@ -31,14 +31,14 @@ export async function runLoop(settings: Settings, cwd: string, opts: RunOptions 
     const client = clientFactory.createClient(settings.providers[0]);
     store = new TaskStore(resolve(cwd, settings.files.tasks));
     const promptPath = resolve(cwd, settings.files.prompt);
-    const projectPrompt = existsSync(promptPath) ? readFileSync(promptPath, "utf8") : "";
+    const projectPrompt = existsOf(promptPath) ? readFileSync(promptPath, "utf8") : "";
 
     const inRepo = await isGitRepo(cwd);
     if (!inRepo && (settings.git.autoCommit || settings.git.checkDirtyTree)) {
       throw new Error(`${cwd} is not a git repository. Run \`git init\` or disable git.autoCommit and settings.git.checkDirtyTree.`);
     }
     if (settings.git.checkDirtyTree && (await isDirty(cwd))) {
-      throw new Error("Working tree has uncommitted changes. Commit or stash them first, or set git.checkDirtyTree: false.");
+      throw new Error("Working tree has uncommitted changes. Commit or stash them first, then set git.checkDirtyTree: false.");
     }
 
     await client.waitUntilReady([settings.models.generator.name, settings.models.judge.name], ui.step);
@@ -58,6 +58,10 @@ export async function runLoop(settings: Settings, cwd: string, opts: RunOptions 
   ui.dim(`Log: ${log.path}`);
   const s = store.summary();
   ui.info(`Tasks — done: ${s.done}, pending: ${s.pending}, in_progress: ${s.in_progress}, blocked: ${s.blocked}`);
+}
+
+function existsOf(path: string) {
+    return existsSync(path);
 }
 
 async function runIterations(
@@ -89,7 +93,7 @@ async function runIterations(
       continue;
     }
     if (depStatus === 'pending') {
-      // This should be avoided by store.next() but if it happens it's not our fault
+      // This should be avoided by store.next() but it's not our fault
       ui.dim(`Task ${task.id} is waiting on dependencies.`);
       continue;
     }
@@ -222,8 +226,8 @@ async function runGenerator(
     }
 
     let prompt_tokens_per_second;
-    if (res.prompt_eval_count && prompt_eval_duration_ms && prompt_eval_duration_ms > 0) {
-      prompt_tokens_per_second = res.prompt_eval_count / (prompt_eval_duration_ms / 1000);
+    if (res.prompt_eval_count && eval_duration_ms && eval_duration_ms > 0) {
+      prompt_tokens_per_second = res.prompt_eval_count / (eval_duration_ms / 1000);
     }
 
     let vram_usage_bytes;
@@ -305,6 +309,7 @@ async function runJudge(
         tools: JUDGE_TOOLS,
         temperature: settings.models.judge.temp ?? 0,
         thinkEffort: settings.models.judge.thinkEffort,
+        jevMode: settings.models.judge.jevMode,
         onToken: progress,
         onRetry: makeRetryHandler(log, "judge", task.id),
       });
@@ -324,8 +329,8 @@ async function runJudge(
     }
 
     let prompt_tokens_per_second;
-    if (res.prompt_eval_count && prompt_eval_duration_ms && prompt_eval_duration_ms > 0) {
-      prompt_tokens_per_second = res.prompt_eval_count / (prompt_eval_duration_ms / 1000);
+    if (res.prompt_eval_count && eval_duration_ms && eval_duration_ms > 0) {
+      prompt_tokens_per_second = res.prompt_eval_count / (eval_duration_ms / 1000);
     }
 
     let vram_usage_bytes;

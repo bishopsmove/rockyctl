@@ -84,6 +84,7 @@ export class OllamaClient implements HostProvider {
       format?: "json" | Record<string, unknown>;
       temperature?: number;
       thinkEffort?: ThinkEffort;
+      jevMode?: boolean;
       onToken?: TokenFn;
       onRetry?: RetryFn;
     },
@@ -109,6 +110,7 @@ export class OllamaClient implements HostProvider {
       format?: "json" | Record<string, unknown>;
       temperature?: number;
       thinkEffort?: ThinkEffort;
+      jevMode?: boolean;
       onToken?: TokenFn;
       onRetry?: RetryFn;
     },
@@ -133,13 +135,14 @@ export class OllamaClient implements HostProvider {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), this.provider.requestTimeoutMs);
     try {
+      const endpoint = opts?.jevMode ? "/v1/systemone" : "/api/chat";
       const res = await this.fetch(
-        "/api/chat",
+        endpoint,
         { method: "POST", body: JSON.stringify(body) },
         this.provider.requestTimeoutMs,
         controller,
       );
-      if (!res.body) throw new OllamaError(`POST /api/chat returned no body`);
+      if (!res.body) throw new OllamaError(`POST ${endpoint} returned no body`);
 
       const message: ChatMessage = { role: "assistant", content: "" };
       let final: Partial<ChatResponse> = {};
@@ -185,9 +188,10 @@ export class OllamaClient implements HostProvider {
     }
   }
 
-  /** Non-streaming one-shot generation via /api/generate. Used for prompts that don't need
-   * tool calling or streaming progress. Honours the `thinkEffort` setting: when it
-   * is present the top-level `think` field is set to its value; when it is absent
+  /**
+   * Non-streaming one-shot generation via /api/generate. Used for prompts that don't need
+   * tool calling or streaming progress. Honours the `thinkEffort` setting: when it is
+   * present the top-level `think` field is set to its value; when it is absent
    * the field is omitted entirely so Ollama uses its own default. Also supports temperature per-model.
    */
   async generate(
@@ -308,7 +312,7 @@ export class OllamaClient implements HostProvider {
     try {
       loadedModels = await this.loadedModels(remaining());
     } catch (err) {
-      // If we can't query /api/ps, we'll assume nothing is loaded to be safe
+      // if (err) console.error(err);
     }
 
     for (const model of [...new Set(models)]) {
@@ -373,29 +377,6 @@ export class OllamaClient implements HostProvider {
   }
 }
 
-// /** Splits a byte stream into newline-delimlined JSON lines. */
-// async function* ndjsonLines(body: ReadableStream<Uint8Array>, signal: AbortSignal): AsyncGenerator<string> {
-//   const reader = body.getReader();
-//   const decoder = new TextDecoder();
-//   let buffer = "";
-//   try {
-//     for (;;) {
-//       if (signal.aborted) throw new Error("aborted");
-//       const { value, done } = await reader.read();
-//       if (done) break;
-//       buffer += decoder.decode(value, { stream: true });
-//       let idx = buffer.indexOf("\n");
-//       while (idx >= 0) {
-//         const line = buffer.slice(idx + 1);
-//         buffer = buffer.slice(idx + 1);
-//         if (line) yield line;
-//       }
-//     }
-//   } finally {
-     // reader.releaseLock();
-//   }
-// }
-
 const RETRYABLE_PATTERN =
   /ECONNRESET|ECONNREFUSED|ETIMEDOUT|EPIPE|ECONNABORTED|EAI_AGAIN|ENOTFOUND|UND_ERR_SOCKET|socket hang up|other side closed|ended without a final chunk/i;
 
@@ -418,7 +399,3 @@ export function describeError(err: unknown): string {
     }
     return parts.join(" <- ");
 }
-
-// export function sleep(ms: number): Promise<void> {
-//   return new Promise((r) => setTimeout(r));
-// }
