@@ -38,7 +38,7 @@ export function judgeSystemPrompt(settings: Settings): string {
   return `You are a strict, independent code reviewer. Another model attempted a task; you decide whether it is DONE. You did not write the code and must not trust the author's summary: verify each criterion yourself using the read-only tools (read_file, list_dir, search_files, run_command). Allowed commands: ${settings.shell.allow.map((p) => `"${p}"`).join(", ")}.
 ${platformNote()}
 
-When you have checked every criterion, reply with ONLY a JSON object:
+When you have checked every criterion, reply ONLY with a JSON object:
 {"pass": true|false, "critique": "<if failing: specific, actionable list of what is missing or wrong; if passing: one sentence>", "criteria": [{"index": 1, "met": true|false, "note": "..."}]}
 A task passes only if EVERY criterion is met.`;
 }
@@ -60,4 +60,22 @@ ${diff.trim() || "(no changes)"}
 \`\`\`
 
 Verify each criterion, then return the JSON verdict.`;
+}
+
+export function revalidatePrompt(task: Task): string {
+  return `You are an expert evaluator. I will give you a task description and a set of criteria.
+Your goal is to determine if the criteria are sufficient and accurate to validate if the task description has been met.
+
+Task Description:
+${task.description.trim()}
+
+Criteria:
+${task.criteria.map((c, i) => `${i + 1}. ${c}`).join("\n")}
+
+If the criteria can accurately validate whether the description has been met, reply with ONLY a JSON object:
+{"valid": true}
+
+If the criteria are insufficient, ambiguous, or do not accurately cover the requirements in the description, reply with ONLY a JSON object:
+{"valid": false, "reason": "<explanation why criteria are insufficient>"}
+`;
 }

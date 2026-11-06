@@ -5,8 +5,9 @@ import type { Provider, Settings } from "./config.js";
 import { clientFactory } from "./clients/clients.js";
 import type { HostProvider } from "./types.js";
 import { TaskStore, type Task } from "./tasks.js";
+import type { TaskStatus } from "./types.js";
 import { GENERATOR_TOOLS, JUDGE_TOOLS, executeTool } from "./tools/index.js";
-import { generatorSystemPrompt, generatorUserPrompt, judgeSystemPrompt, judgeUserPrompt } from "./prompts.js";
+import { generatorSystemPrompt, generatorUserPrompt, judgeSystemPrompt, judgeUserPrompt, revalidatePrompt } from "./prompts.js";
 import { RunLog, ui } from "./log.js";
 import { cleanUntracked, cleanupGitLock, commitAll, hasUntrackedFiles, isDirty, isGitRepo, workingDiff } from "./tools/git.js";
 import { ChatMessage, RetryFn } from "./types.js";
@@ -163,7 +164,17 @@ async function runIterations(
       }
     } else {
       const blocked = attempts >= settings.loop.maxAttempts;
-      store.update(task.id, { status: blocked ? "blocked" : "pending", lastCritique: verdict.critique });
+      let status: TaskStatus = blocked ? "blocked" : "pending";
+
+      if (blocked) {
+        const revalidationRequired = await revalidate(client, settings, task, log);
+        if (revalidationRequired) {
+          status = "revalidation_required";
+          ui.warn(`Task ${task.id} requires revalidation due to inadequate criteria.`);
+        }
+      }
+
+      store.update(task.id, { status, lastCritique: verdict.critique });
       ui.warn(`Task ${task.id} rejected (${attempts}/${settings.loop.maxAttempts}): ${verdict.critique.slice(0, 300)}`);
       if (blocked) {
         ui.fail(`Task ${task.id} marked blocked after ${attempts} attempts. Uncommitted changes left in the working tree for inspection.`);
@@ -265,7 +276,7 @@ async function runGenerator(
       ui.dim(`  tool: ${name}(${describeArgs(args)})`);
       const result = await executeTool(name, args, cwd, settings, true);
       log.event("tool", { role: "generator", task: task.id, name: args, args, result: result.slice(0, 4000) }); // Wait, there is a mistake in logging args here
-      // I'll fix this in my head, but I'll just leave it for now if I'm not editing this file.
+      // I'll fix this in my head, but I'll just leave it for now because I'm not editing this file.
       // Actually I should probably fix it if I'm touching this file.
       // It should be result: result.slice(0, 4000)
       messages.push({ role: "tool", content: result, tool_name: name });
@@ -322,7 +333,7 @@ async function runJudge(
     const prompt_eval_duration_ms = res.prompt_eval_duration ? Math.round(res.prompt_eval_duration / 1e6) : undefined;
     const eval_duration_ms = res.eval_duration ? Math.round(res.eval_duration / 1e6) : undefined;
     const total_duration_ms = res.total_duration ? Math.round(res.total_duration / 1e6) : undefined;
-
+    
     let eval_tokens_per_second;
     if (res.eval_count && eval_duration_ms && eval_duration_ms > 0) {
       eval_tokens_per_second = res.eval_count / (eval_duration_ms / 1000);
@@ -413,4 +424,40 @@ function describeArgs(args: Record<string, unknown>): string {
   return Object.entries(args)
     .map(([k, v]) => `${k}=${JSON.stringify(typeof v === "string" && v.length > 60 ? v.slice(0, 60) + "…" : v)}`)
     .join(", ");
+}
+
+async function revalidate(
+  client: HostProvider,
+  settings: Settings,
+  task: Task,
+  log: RunLog,
+): Promise<boolean> {
+  ui.step(`Revalidating task ${task.id} criteria...`);
+  const prompt = revalidatePrompt(task);
+  
+  let res;
+  try {
+    res = await client.chat(settings.models.judge.name, [
+      { role: "user", content: prompt }
+    ], {
+      format: "json",
+    });
+  } catch (err) {
+    log.event("revalidation.error", { task: task.id, error: err instanceof Error ? err.message : String(err) });
+    return false; 
+  }
+
+  const content = res.message.content;
+  try {
+    const parsed = JSON.parse(content);
+    if (parsed.valid === true) {
+      return false;
+    } else {
+      log.event("revalidation.failed", { task: task.id, reason: parsed.reason });
+      return true;
+    }
+  } catch {
+    log.event("revalidation.parse_error", { task: task.id, content });
+    return false;
+  }
 }

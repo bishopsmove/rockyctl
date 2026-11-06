@@ -1,7 +1,6 @@
 import { readFileSync, writeFileSync, existsSync } from "node:fs";
 import { parseDocument, isSeq, isMap, type Document } from "yaml";
-
-export type TaskStatus = "pending" | "in_progress" | "done" | "blocked" | "skip";
+import type { TaskStatus } from "./types.js";
 
 export interface Task {
   id: string;
@@ -88,7 +87,7 @@ export class TaskStore {
   }
 
   summary(): Record<string, number> {
-    const s: Record<string, number> = { pending: 0, in_progress: 0, done: 0, blocked: 0, skip: 0 };
+    const s: Record<string, number> = { pending: 0, in_progress: 0, done: 0, blocked: 0, skip: 0, revalidation_required: 0 };
     for (const t of this.list()) {
       const status = t.status as string;
       s[status] = (s[status] ?? 0) + 1;

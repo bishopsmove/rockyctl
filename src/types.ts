@@ -2,6 +2,8 @@ import type { Provider, ThinkEffort } from "./config.js";
 
 export type { ThinkEffort };
 
+export type TaskStatus = "pending" | "in_progress" | "done" | "blocked" | "revalidation_required" | "skip";
+
 export interface ChatMessage {
   role: "system" | "user" | "assistant" | "tool";
   content: string;
@@ -31,6 +33,9 @@ export interface ChatResponse {
   eval_count?: number;
   eval_duration?: number;
   total_duration?: number;
+  prompt_tokens_per_second?: number;
+  eval_tokens_per_second?: number;
+  vram_usage_bytes?: number;
 }
 
 export interface GenerateResponse {
